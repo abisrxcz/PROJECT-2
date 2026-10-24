@@ -1,0 +1,4 @@
+Data Structures and Algorithms (DSA) - Project 2
+Huffman Coding is a greedy algorithm that finds an optimal prefix code.
+It is widely used in lossless data compression, including formats like JPEG, GZIP, and MP3.
+Every character receives a variable-length binary code based on its frequency of occurrence!
