@@ -5,11 +5,22 @@
 #include <queue>
 #include <unordered_map>
 #include <cstdint>
+#include <cstdio>
 #include <iomanip>
-#include <filesystem>
 #include <algorithm>
 
-namespace fs = std::filesystem;
+namespace fs {
+inline bool exists(const std::string& path) {
+    std::ifstream file(path, std::ios::binary);
+    return file.good();
+}
+
+inline uint64_t file_size(const std::string& path) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file) return 0;
+    return static_cast<uint64_t>(file.tellg());
+}
+}
 
 // ============================================================================
 // SECTION 1: HUFFMAN TREE DATA STRUCTURES
