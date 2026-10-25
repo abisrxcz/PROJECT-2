@@ -252,29 +252,32 @@ string formatChar(uint8_t ch) {
 
 // // Prints the Huffman Codebook table and frequency breakdown for analysis.
 void displayCodeTable(const uint64_t freq[256], const string codes[256], uint64_t totalBytes) {
-    cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "\n================================================================================\n" << COLOR_RESET;
     cout << COLOR_WHITE << "                      COMPRESSION HUFFMAN TABLE                           \n" << COLOR_RESET;
-    cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "================================================================================\n" << COLOR_RESET;
     cout << COLOR_WHITE << left << setw(6)  << "Byte"
               << setw(24) << "Character"
               << setw(14) << "Frequency"
               << setw(12) << "Percentage"
               << setw(18) << "Huffman Code"
               << setw(8)  << "Length" << "\n"<< COLOR_RESET;
-    cout << COLOR_SKY_BLUE << "------------------------------------------------------------------------\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "--------------------------------------------------------------------------------\n" << COLOR_RESET;
 
     for (int i = 0; i < 256; ++i) {
         if (freq[i] > 0) {
             double pct = (totalBytes > 0) ? (static_cast<double>(freq[i]) / totalBytes * 100.0) : 0.0;
-            cout << left << setw(6)  << COLOR_GREEN << i
-                      << setw(24) << COLOR_SKY_BLUE << formatChar(static_cast<uint8_t>(i))
-                      << setw(14) << COLOR_WHITE << freq[i]
-                      << fixed << setprecision(2) << setw(10) << pct << "% "
+            std::ostringstream pctStream;
+            pctStream << std::fixed << std::setprecision(2) << pct << "%";
+            cout << left 
+                      << COLOR_GREEN << setw(6) << i
+                      << COLOR_SKY_BLUE << setw(24) <<  formatChar(static_cast<uint8_t>(i))
+                      << COLOR_WHITE <<  setw(14) << freq[i]
+                      << setw(14) << pctStream.str() 
                       << setw(18) << codes[i]
                       << setw(8)  << codes[i].length() << "\n" << COLOR_RESET;
         }
     }
-    cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "================================================================================\n\n" << COLOR_RESET;
 }
 //=========================================================================================
 
@@ -283,29 +286,32 @@ void displayCodeTable(const uint64_t freq[256], const string codes[256], uint64_
 //==============================================================================================
 // // Prints the Huffman Codebook table for Decompression based on reconstructed metadata.
 void displayDecompressionTable(const uint64_t freq[256], const string codes[256], uint64_t totalBytes) {
-    cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "\n================================================================================\n" << COLOR_RESET;
     cout << COLOR_WHITE << "                   DECOMPRESSION HUFFMAN TABLE                       \n" << COLOR_RESET;
-    cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "================================================================================\n" << COLOR_RESET;
     cout << COLOR_WHITE << left << setw(6)  << "Byte"
               << setw(24) << "Character"
               << setw(14) << "Restored Freq"
               << setw(12) << "Percentage"
               << setw(18) << "Decoded Code"
               << setw(8)  << "Length" << COLOR_RESET << "\n";
-    cout << COLOR_SKY_BLUE << "------------------------------------------------------------------------\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "--------------------------------------------------------------------------------\n" << COLOR_RESET;
 
     for (int i = 0; i < 256; ++i) {
         if (freq[i] > 0) {
             double pct = (totalBytes > 0) ? (static_cast<double>(freq[i]) / totalBytes * 100.0) : 0.0;
-            cout << COLOR_GREEN << left << setw(6)  << COLOR_GREEN << i
-                      << setw(24) << COLOR_SKY_BLUE << formatChar(static_cast<uint8_t>(i))
-                      << setw(14) << COLOR_WHITE << freq[i]
-                      << fixed << setprecision(2) << setw(10) << pct << "% "
+            std::ostringstream pctStream;
+        pctStream << std::fixed << std::setprecision(2) << pct << "%";
+            cout << left 
+                      << COLOR_GREEN << setw(6) << i
+                      << COLOR_SKY_BLUE << setw(24) <<  formatChar(static_cast<uint8_t>(i))
+                      << COLOR_WHITE << setw(14) <<  freq[i]
+                      << setw(14) << pctStream.str() 
                       << setw(18) << codes[i]
                       << setw(8)  << codes[i].length() << "\n" << COLOR_RESET;
         }
     }
-    cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "================================================================================\n\n" << COLOR_RESET;
 }
 
 
@@ -470,7 +476,7 @@ bool compressFile(const string& inputPath, const string& outputPath) {
     }
 
     cout << COLOR_SKY_BLUE << "\n========================================================================\n\n" << COLOR_RESET;
-    cout << COLOR_WHITE << "                      COMPRESSION SUMMARY REPORT                        \n";
+    cout << COLOR_WHITE << "                      COMPRESSION SUMMARY REPORT                        \n\n";
     cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
     cout << COLOR_GREEN << "  Original File:          " << COLOR_WHITE << inputPath << "\n";
     cout << COLOR_GREEN << "  Compressed File:        " << COLOR_WHITE << outputPath << "\n";
@@ -646,7 +652,7 @@ bool decompressFile(const string& inputPath, const string& outputPath) {
     delete root;
 
     cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
-    cout << COLOR_WHITE << "                     DECOMPRESSION SUMMARY REPORT                       \n" << COLOR_RESET;
+    cout << COLOR_WHITE << "                     DECOMPRESSION SUMMARY REPORT                       \n\n" << COLOR_RESET;
     cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
     cout << COLOR_GREEN << "  Input Encoded File:     " << COLOR_WHITE << inputPath << "\n" << COLOR_RESET;
     cout << COLOR_GREEN << "  Restored Output File:   " << COLOR_WHITE << outputPath << "\n" << COLOR_RESET;
