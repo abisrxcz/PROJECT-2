@@ -462,14 +462,18 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
     // // Step 1: Open compressed file in binary mode
     std::ifstream inFile(inputPath, std::ios::binary);
     if (!inFile.is_open()) {
-        std::cerr << "[-] Error: Failed to open compressed file: " << inputPath << "\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        std::cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Failed to open compressed file: " << inputPath << "\n\n" << COLOR_RESET;
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
 
     // // Step 2: Validate Header Magic Identifier
     char magic[4];
     if (!inFile.read(magic, 4) || magic[0] != 'H' || magic[1] != 'U' || magic[2] != 'F' || magic[3] != '1') {
-        std::cerr << "[-] Error: Invalid file format or corrupted header. Expected 'HUF1'.\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        std::cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Invalid file format or corrupted header. Expected 'HUF1'.\n\n" << COLOR_RESET;
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
 
@@ -483,7 +487,9 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
     if (originalSize == 0) {
         std::ofstream outFile(outputPath, std::ios::binary);
         outFile.close();
-        std::cout << "[+] Decompression completed: original file was empty (0 bytes).\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        std::cout << COLOR_GREEN << "[+]" << COLOR_WHITE << " Decompression completed: original file was empty (0 bytes).\n\n" << COLOR_RESET;
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return true;
     }
 
@@ -496,18 +502,47 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
         inFile.read(reinterpret_cast<char*>(&count), sizeof(count));
         freq[ch] = count;
     }
+     //->loading bar for compression
+    int totalWidth = 30;
+    std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    std::cout << COLOR_WHITE << "Rebuilding Huffman tree & decompressing file...\n\n" << COLOR_RESET;
+
+    for (int i = 0; i <= 100; i += 2) {
+        int filledWidth = (i * totalWidth) / 100;
+
+        std::cout << "\r[";
+
+        std::cout << COLOR_GREEN;
+        for (int j = 0; j < filledWidth; ++j) {
+            std::cout << "=";
+        }
+
+        std::cout << COLOR_WHITE;
+        for (int j = filledWidth; j < totalWidth; ++j) {
+            std::cout << " ";
+        }
+
+        std::cout << "] " << COLOR_GREEN << i << "%" << COLOR_WHITE << std::flush;
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+    }
+
+    std::cout << "\n\n";
 
     // // Step 5: Rebuild the identical Huffman Tree
     HuffmanNode* root = buildHuffmanTree(freq);
     if (!root) {
-        std::cerr << "[-] Error: Failed to reconstruct Huffman tree from header.\n";
+         std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        std::cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Failed to reconstruct Huffman tree from header.\n\n" << COLOR_RESET;
+         std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
 
     // // Step 6: Open output file for writing restored data
     std::ofstream outFile(outputPath, std::ios::binary);
     if (!outFile.is_open()) {
-        std::cerr << "[-] Error: Cannot create restored output file: " << outputPath << "\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        std::cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Cannot create restored output file: " << outputPath << "\n\n" << COLOR_RESET;
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         delete root;
         return false;
     }
@@ -527,7 +562,9 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
     while (decodedBytes < originalSize) {
         int bit = bitReader.readBit();
         if (bit == -1) {
-            std::cerr << "[-] Error: Unexpected EOF in bitstream before decoding all bytes.\n";
+            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+            std::cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Unexpected EOF in bitstream before decoding all bytes.\n\n" << COLOR_RESET;
+            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
             delete root;
             return false;
         }
@@ -536,7 +573,9 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
         currentNode = (bit == 0) ? currentNode->left : currentNode->right;
 
         if (!currentNode) {
-            std::cerr << "[-] Error: Invalid bit encountered during Huffman tree traversal.\n";
+            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+            std::cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Invalid bit encountered during Huffman tree traversal.\n\n" << COLOR_RESET;
+            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
             delete root;
             return false;
         }
@@ -568,15 +607,15 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
     outFile.close();
     delete root;
 
-    std::cout << "\n========================================================================\n";
-    std::cout << "                     DECOMPRESSION SUMMARY REPORT                       \n";
-    std::cout << "========================================================================\n";
-    std::cout << "  Input Encoded File:     " << inputPath << "\n";
-    std::cout << "  Restored Output File:   " << outputPath << "\n";
-    std::cout << "  Expected Bytes:         " << originalSize << " bytes\n";
-    std::cout << "  Decoded Bytes:          " << decodedBytes << " bytes\n";
-    std::cout << "  Status:                 Successfully restored identical file!\n";
-    std::cout << "========================================================================\n\n";
+    std::cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
+    std::cout << COLOR_WHITE << "                     DECOMPRESSION SUMMARY REPORT                       \n" << COLOR_RESET;
+    std::cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "  Input Encoded File:     " << COLOR_WHITE << inputPath << "\n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "  Restored Output File:   " << COLOR_WHITE << outputPath << "\n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "  Expected Bytes:         " << COLOR_WHITE << originalSize << " bytes\n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "  Decoded Bytes:          " << COLOR_WHITE << decodedBytes << " bytes\n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "  Status:                "  << COLOR_WHITE << "Successfully restored identical file!\n" << COLOR_RESET;
+    std::cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
 
     return true;
 }
@@ -641,13 +680,13 @@ bool verifyFileIntegrity(const std::string& originalPath, const std::string& dec
     std::cout << COLOR_GREEN << "      Decompression check: " << COLOR_WHITE << "Comparing original and decompressed files           \n\n" << COLOR_RESET;
 
     std::cout << COLOR_SKY_BLUE << "========================================================================   \n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "  Decompressed File:   " << COLOR_WHITE << decompressedPath << " (" << decompSize << " bytes)\n";
-    std::cout << COLOR_GREEN << "  Original File:       " << COLOR_WHITE << originalPath << " (" << origSize << " bytes)\n";
+    std::cout << COLOR_GREEN << "  Decompressed File:   " << COLOR_WHITE << decompressedPath << " (" << decompSize << " bytes)\n " << COLOR_RESET;
+    std::cout << COLOR_GREEN << "  Original File:       " << COLOR_WHITE << originalPath << " (" << origSize << " bytes)\n" << COLOR_RESET;
 
     if (origSize != decompSize) {
         std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         std::cout << COLOR_RED << "  [ERROR]" << COLOR_WHITE << " File sizes do NOT match! Lossless check failed.\n\n" << COLOR_RESET;
-        std::cout << "-------------------------------------------------------------------------\n\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
 
@@ -665,7 +704,7 @@ bool verifyFileIntegrity(const std::string& originalPath, const std::string& dec
         if (decompFile.gcount() != bytesRead) {
             std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
             std::cout << COLOR_RED << "  [ERROR]" << COLOR_WHITE << " Stream mismatch at byte offset " << byteOffset << "!\n\n" << COLOR_RESET;
-            std::cout << "-------------------------------------------------------------------------\n\n";
+            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
             return false;
         }
 
@@ -675,7 +714,7 @@ bool verifyFileIntegrity(const std::string& originalPath, const std::string& dec
                 std::cout << COLOR_RED << "  [ERROR]" << COLOR_WHITE << " Character mismatch at byte " << (byteOffset + i) << "!\n" << COLOR_RESET;
                 std::cout << COLOR_GREEN << "         Original:     0x" << COLOR_WHITE << std::hex << static_cast<int>(static_cast<uint8_t>(b1[i])) << "\n";
                 std::cout << COLOR_GREEN << "         Decompressed: 0x" << COLOR_WHITE << std::hex << static_cast<int>(static_cast<uint8_t>(b2[i])) << std::dec << "\n";
-                std::cout << "-------------------------------------------------------------------------\n\n";
+                std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
                 return false;
             }
         }
