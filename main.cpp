@@ -270,11 +270,43 @@ void displayCodeTable(const uint64_t freq[256], const std::string codes[256], ui
                       << std::setw(14) << COLOR_WHITE << freq[i]
                       << std::fixed << std::setprecision(2) << std::setw(10) << pct << "% "
                       << std::setw(18) << codes[i]
-                      << std::setw(8)  << codes[i].length() << "\n";
+                      << std::setw(8)  << codes[i].length() << "\n" << COLOR_RESET;
         }
     }
     std::cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
 }
+//=========================================================================================
+
+//SECTION 3-B DECOMPRESSION CODEBOOK DISPLAY
+
+//==============================================================================================
+// // Prints the Huffman Codebook table for Decompression based on reconstructed metadata.
+void displayDecompressionTable(const uint64_t freq[256], const std::string codes[256], uint64_t totalBytes) {
+    std::cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
+    std::cout << COLOR_WHITE << "                   DECOMPRESSION HUFFMAN CODEBOOK                       \n" << COLOR_RESET;
+    std::cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
+    std::cout << COLOR_WHITE << std::left << std::setw(6)  << "Byte"
+              << std::setw(24) << "Character"
+              << std::setw(14) << "Restored Freq"
+              << std::setw(12) << "Percentage"
+              << std::setw(18) << "Decoded Code"
+              << std::setw(8)  << "Length" << COLOR_RESET << "\n";
+    std::cout << COLOR_SKY_BLUE << "------------------------------------------------------------------------\n" << COLOR_RESET;
+
+    for (int i = 0; i < 256; ++i) {
+        if (freq[i] > 0) {
+            double pct = (totalBytes > 0) ? (static_cast<double>(freq[i]) / totalBytes * 100.0) : 0.0;
+            std::cout << COLOR_GREEN << std::left << std::setw(6)  << COLOR_GREEN << i
+                      << std::setw(24) << COLOR_SKY_BLUE << formatChar(static_cast<uint8_t>(i))
+                      << std::setw(14) << COLOR_WHITE << freq[i]
+                      << std::fixed << std::setprecision(2) << std::setw(10) << pct << "% "
+                      << std::setw(18) << codes[i]
+                      << std::setw(8)  << codes[i].length() << "\n" << COLOR_RESET;
+        }
+    }
+    std::cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
+}
+
 
 // ============================================================================
 // SECTION 4: FILE COMPRESSION
@@ -531,11 +563,16 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
     // // Step 5: Rebuild the identical Huffman Tree
     HuffmanNode* root = buildHuffmanTree(freq);
     if (!root) {
-         std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-        std::cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Failed to reconstruct Huffman tree from header.\n\n" << COLOR_RESET;
-         std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        std::cerr << COLOR_RED << "[-]" << COLOR_WHITE << " Error: Failed to reconstruct Huffman tree from header.\n" << COLOR_RESET;
         return false;
     }
+
+    // // Generate Huffman codes from the reconstructed tree
+    std::string codes[256];
+    generateHuffmanCodes(root, "", codes);
+
+    // // Display the restored Codebook Table
+    displayDecompressionTable(freq, codes, originalSize);
 
     // // Step 6: Open output file for writing restored data
     std::ofstream outFile(outputPath, std::ios::binary);
