@@ -8,6 +8,15 @@
 #include <cstdio>
 #include <iomanip>
 #include <algorithm>
+#include <thread>
+#include <chrono>
+
+//-> ANSI escape codes for colored console output
+#define COLOR_RESET   "\033[0m" //-> Reset to default terminal color
+#define COLOR_SKY_BLUE "\033[96m" //-> Bright Cyan / Sky Blue
+#define COLOR_WHITE    "\033[97m" //-> Bright White
+#define COLOR_GREEN    "\033[32m" //-> Green
+#define COLOR_RED     "\033[31m" //-> Red
 
 namespace fs {
 inline bool exists(const std::string& path) {
@@ -549,13 +558,42 @@ bool verifyFileIntegrity(const std::string& originalPath, const std::string& dec
     std::ifstream decompFile(decompressedPath, std::ios::binary);
 
     if (!origFile.is_open()) {
-        std::cerr << "[-] Error: Could not open original file: " << originalPath << "\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        std::cerr << COLOR_RED <<"[!]" << COLOR_WHITE << " Error: Could not open original file: " << originalPath << "\n\n" << COLOR_RESET;
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
     if (!decompFile.is_open()) {
-        std::cerr << "[-] Error: Could not open decompressed file: " << decompressedPath << "\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        std::cerr << COLOR_RED <<"[!]" << COLOR_WHITE << " Error: Could not open decompressed file: " << decompressedPath << "\n\n" << COLOR_RESET;
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
+    //loading bar for verification
+    int totalWidth = 30;
+    std::cout << COLOR_SKY_BLUE << "\n-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    std::cout << COLOR_WHITE << "Reading and verifying byte streams...\n  " << COLOR_RESET;
+
+    for (int i = 0; i <= 100; i += 2) {
+        int filledWidth = (i * totalWidth) / 100;
+
+        std::cout << "\r[";
+
+        std::cout << COLOR_GREEN;
+        for (int j = 0; j < filledWidth; ++j) {
+            std::cout << "=";
+        }
+
+        std::cout << COLOR_WHITE;
+        for (int j = filledWidth; j < totalWidth; ++j) {
+            std::cout << " ";
+        }
+
+        std::cout << "] " << COLOR_GREEN << i << "%" << COLOR_WHITE << std::flush;
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+    }
+
+    std::cout << "\n\n";
 
     // Compare file sizes first
     origFile.seekg(0, std::ios::end);
@@ -563,15 +601,19 @@ bool verifyFileIntegrity(const std::string& originalPath, const std::string& dec
     std::streamsize origSize = origFile.tellg();
     std::streamsize decompSize = decompFile.tellg();
 
-    std::cout << "\n========================================================================\n";
-    std::cout << "                     FILE INTEGRITY VERIFICATION                        \n";
-    std::cout << "========================================================================\n";
-    std::cout << "  Original File:       " << originalPath << " (" << origSize << " bytes)\n";
-    std::cout << "  Decompressed File:   " << decompressedPath << " (" << decompSize << " bytes)\n";
+    std::cout << COLOR_SKY_BLUE << "\n========================================================================\n\n" << COLOR_RESET;
+
+    std::cout << COLOR_WHITE << "                       FILE INTEGRITY VERIFICATION                        \n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "      Decompression check: " << COLOR_WHITE << "Comparing original and decompressed files           \n\n" << COLOR_RESET;
+
+    std::cout << COLOR_SKY_BLUE << "========================================================================   \n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "  Decompressed File:   " << COLOR_WHITE << decompressedPath << " (" << decompSize << " bytes)\n";
+    std::cout << COLOR_GREEN << "  Original File:       " << COLOR_WHITE << originalPath << " (" << origSize << " bytes)\n";
 
     if (origSize != decompSize) {
-        std::cout << "  [FAIL] File sizes do NOT match! Lossless check failed.\n";
-        std::cout << "========================================================================\n\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        std::cout << COLOR_RED << "  [ERROR]" << COLOR_WHITE << " File sizes do NOT match! Lossless check failed.\n\n" << COLOR_RESET;
+        std::cout << "-------------------------------------------------------------------------\n\n";
         return false;
     }
 
@@ -587,26 +629,29 @@ bool verifyFileIntegrity(const std::string& originalPath, const std::string& dec
         decompFile.read(b2, bytesRead);
 
         if (decompFile.gcount() != bytesRead) {
-            std::cout << "  [FAIL] Stream mismatch at byte offset " << byteOffset << "!\n";
-            std::cout << "========================================================================\n\n";
+            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+            std::cout << COLOR_RED << "  [ERROR]" << COLOR_WHITE << " Stream mismatch at byte offset " << byteOffset << "!\n\n" << COLOR_RESET;
+            std::cout << "-------------------------------------------------------------------------\n\n";
             return false;
         }
 
         for (std::streamsize i = 0; i < bytesRead; ++i) {
             if (b1[i] != b2[i]) {
-                std::cout << "  [FAIL] Character mismatch at byte " << (byteOffset + i) << "!\n";
-                std::cout << "         Original:     0x" << std::hex << static_cast<int>(static_cast<uint8_t>(b1[i])) << "\n";
-                std::cout << "         Decompressed: 0x" << std::hex << static_cast<int>(static_cast<uint8_t>(b2[i])) << std::dec << "\n";
-                std::cout << "========================================================================\n\n";
+                std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+                std::cout << COLOR_RED << "  [ERROR]" << COLOR_WHITE << " Character mismatch at byte " << (byteOffset + i) << "!\n" << COLOR_RESET;
+                std::cout << COLOR_GREEN << "         Original:     0x" << COLOR_WHITE << std::hex << static_cast<int>(static_cast<uint8_t>(b1[i])) << "\n";
+                std::cout << COLOR_GREEN << "         Decompressed: 0x" << COLOR_WHITE << std::hex << static_cast<int>(static_cast<uint8_t>(b2[i])) << std::dec << "\n";
+                std::cout << "-------------------------------------------------------------------------\n\n";
                 return false;
             }
         }
         byteOffset += bytesRead;
     }
 
-    std::cout << "  [PASS] 100% MATCH: Every single byte is identical!\n";
-    std::cout << "         Lossless compression and decompression verified.\n";
-    std::cout << "========================================================================\n\n";
+    std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "  [PASS]" << COLOR_WHITE << " 100% MATCH: Every single byte is identical!\n" << COLOR_RESET;
+    std::cout << "\n";
+    std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
     return true;
 }
 
@@ -615,19 +660,24 @@ bool verifyFileIntegrity(const std::string& originalPath, const std::string& dec
 // ============================================================================
 
 void printBanner() {
-    std::cout << "========================================================================\n";
-    std::cout << "        HUFFMAN TEXT FILE COMPRESSION & DECOMPRESSION UTILITY          \n";
-    std::cout << "             Lossless Data Compression in Modern C++17                 \n";
-    std::cout << "========================================================================\n";
+    std::cout << COLOR_SKY_BLUE << "=========================================================================\n" << COLOR_RESET;
+    std::cout << "\n";
+    std::cout << COLOR_WHITE << "   TEXT FILE COMPRESSION AND DECOMPRESSION USING HUFFMAN CODING IN C++\n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "        Programmed by: "<<COLOR_WHITE<<"Vherleen Kail Aday and Abby Shane Daseco\n" << COLOR_RESET; 
+    std::cout << "\n";
+    std::cout << COLOR_SKY_BLUE << "=========================================================================\n" << COLOR_RESET;
+    std::cout << "\n";
 }
 
 void printMenu() {
-    std::cout << "\nChoose an operation:\n";
-    std::cout << "  [1] Compress a Text File (.txt -> .huff)\n";
-    std::cout << "  [2] Decompress a File   (.huff -> .txt)\n";
-    std::cout << "  [3] Verify File Integrity (Compare Original vs Decompressed)\n";
-    std::cout << "  [4] Exit Program\n";
-    std::cout << "Enter your choice (1-4): ";
+    std::cout << COLOR_SKY_BLUE << "Choose an operation:\n\n" << COLOR_RESET;
+    
+    std::cout << COLOR_GREEN << "[1]" << COLOR_WHITE << " Compress a Text File "<<COLOR_GREEN<<"(.txt -> .huff)\n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "[2]" << COLOR_WHITE << " Decompress a File   "<<COLOR_GREEN<<"(.huff -> .txt)\n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "[3]" << COLOR_WHITE << " Verify File Integrity "<<COLOR_GREEN<<"(Compare Original vs Decompressed)\n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "[4]" << COLOR_WHITE << " Exit Program\n\n" << COLOR_RESET;
+    std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    std::cout << "\n" << COLOR_WHITE << "Enter your choice "<<COLOR_GREEN<<"(1-4) -> " << COLOR_RESET;
 }
 
 // Clean helper to read a line / path from console
