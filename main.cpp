@@ -8,8 +8,13 @@
 #include <cstdio>
 #include <iomanip>
 #include <algorithm>
-#include <thread>
-#include <chrono>
+
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+using namespace std;
 
 //-> ANSI escape codes for colored console output
 #define COLOR_RESET   "\033[0m" //-> Reset to default terminal color
@@ -19,13 +24,13 @@
 #define COLOR_RED     "\033[31m" //-> Red
 
 namespace fs {
-inline bool exists(const std::string& path) {
-    std::ifstream file(path, std::ios::binary);
+inline bool exists(const string& path) {
+    ifstream file(path, ios::binary);
     return file.good();
 }
 
-inline uint64_t file_size(const std::string& path) {
-    std::ifstream file(path, std::ios::binary | std::ios::ate);
+inline uint64_t file_size(const string& path) {
+    ifstream file(path, ios::binary | ios::ate);
     if (!file) return 0;
     return static_cast<uint64_t>(file.tellg());
 }
@@ -65,7 +70,7 @@ struct HuffmanNode {
     }
 };
 
-// // CompareNode is a functor used by std::priority_queue to build a Min-Heap.
+// // CompareNode is a functor used by priority_queue to build a Min-Heap.
 // // Nodes with smaller frequencies are given higher priority (pop first).
 // // If frequencies are equal, deterministic tie-breaking compares minChar.
 struct CompareNode {
@@ -87,12 +92,12 @@ struct CompareNode {
 // // so they can be written directly to disk as raw binary data.
 class BitWriter {
 private:
-    std::ofstream& out;  // Target binary output file stream
+    ofstream& out;  // Target binary output file stream
     uint8_t buffer;      // 8-bit accumulator holding bits until full
     int bitCount;        // Number of bits currently stored in the buffer (0 to 8)
 
 public:
-    explicit BitWriter(std::ofstream& stream)
+    explicit BitWriter(ofstream& stream)
         : out(stream), buffer(0), bitCount(0) {}
 
     // // Writes a single bit (0 or 1) into the byte accumulator.
@@ -110,7 +115,7 @@ public:
     }
 
     // // Iterates through a binary string (e.g., "10110") and writes each bit.
-    void writeBits(const std::string& bitString) {
+    void writeBits(const string& bitString) {
         for (char c : bitString) {
             writeBit(c == '1' ? 1 : 0);
         }
@@ -132,12 +137,12 @@ public:
 // // for traversing the Huffman tree during decompression.
 class BitReader {
 private:
-    std::ifstream& in;   // Source binary input file stream
+    ifstream& in;   // Source binary input file stream
     uint8_t buffer;      // 8-bit byte currently being unpacked
     int bitPos;          // Next bit position to extract (7 down to 0, or -1 if empty)
 
 public:
-    explicit BitReader(std::ifstream& stream)
+    explicit BitReader(ifstream& stream)
         : in(stream), buffer(0), bitPos(-1) {}
 
     // // Reads the next bit from the stream.
@@ -168,7 +173,7 @@ public:
 // // Uses a min-priority queue to iteratively merge the two least frequent nodes.
 HuffmanNode* buildHuffmanTree(const uint64_t freq[256]) {
     // // Step 1: Initialize min-priority queue
-    std::priority_queue<HuffmanNode*, std::vector<HuffmanNode*>, CompareNode> pq;
+    priority_queue<HuffmanNode*, vector<HuffmanNode*>, CompareNode> pq;
 
     for (int i = 0; i < 256; ++i) {
         if (freq[i] > 0) {
@@ -200,7 +205,7 @@ HuffmanNode* buildHuffmanTree(const uint64_t freq[256]) {
 
         // Create an internal parent node with combined frequency
         uint64_t combinedFreq = leftChild->frequency + rightChild->frequency;
-        uint8_t combinedMinChar = std::min(leftChild->minChar, rightChild->minChar);
+        uint8_t combinedMinChar = min(leftChild->minChar, rightChild->minChar);
 
         HuffmanNode* parent = new HuffmanNode(combinedFreq, combinedMinChar, leftChild, rightChild);
         pq.push(parent);
@@ -212,7 +217,7 @@ HuffmanNode* buildHuffmanTree(const uint64_t freq[256]) {
 
 // // Traverses the Huffman Tree recursively to generate prefix-free binary codes.
 // // Going left appends '0', going right appends '1'.
-void generateHuffmanCodes(const HuffmanNode* node, const std::string& currentCode, std::string codes[256]) {
+void generateHuffmanCodes(const HuffmanNode* node, const string& currentCode, string codes[256]) {
     if (!node) return;
 
     // // If a leaf node is reached, record the accumulated binary code for this character
@@ -230,7 +235,7 @@ void generateHuffmanCodes(const HuffmanNode* node, const std::string& currentCod
 }
 
 // // Helper function to print an ASCII / character representation cleanly for students
-std::string formatChar(uint8_t ch) {
+string formatChar(uint8_t ch) {
     switch (ch) {
         case '\n': return "'\\n' (Newline)";
         case '\r': return "'\\r' (Carriage Return)";
@@ -238,42 +243,42 @@ std::string formatChar(uint8_t ch) {
         case ' ':  return "' '  (Space)";
         default:
             if (ch >= 32 && ch <= 126) {
-                return std::string("'") + static_cast<char>(ch) + "'";
+                return string("'") + static_cast<char>(ch) + "'";
             } else {
                 return "0x" + ([ch]() {
                     char buf[8];
-                    std::snprintf(buf, sizeof(buf), "%02X", ch);
-                    return std::string(buf);
+                    snprintf(buf, sizeof(buf), "%02X", ch);
+                    return string(buf);
                 })();
             }
     }
 }
 
 // // Prints the Huffman Codebook table and frequency breakdown for analysis.
-void displayCodeTable(const uint64_t freq[256], const std::string codes[256], uint64_t totalBytes) {
-    std::cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
-    std::cout << COLOR_WHITE << "                      COMPRESSION HUFFMAN TABLE                           \n" << COLOR_RESET;
-    std::cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
-    std::cout << COLOR_WHITE << std::left << std::setw(6)  << "Byte"
-              << std::setw(24) << "Character"
-              << std::setw(14) << "Frequency"
-              << std::setw(12) << "Percentage"
-              << std::setw(18) << "Huffman Code"
-              << std::setw(8)  << "Length" << "\n"<< COLOR_RESET;
-    std::cout << COLOR_SKY_BLUE << "------------------------------------------------------------------------\n" << COLOR_RESET;
+void displayCodeTable(const uint64_t freq[256], const string codes[256], uint64_t totalBytes) {
+    cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
+    cout << COLOR_WHITE << "                      COMPRESSION HUFFMAN TABLE                           \n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
+    cout << COLOR_WHITE << left << setw(6)  << "Byte"
+              << setw(24) << "Character"
+              << setw(14) << "Frequency"
+              << setw(12) << "Percentage"
+              << setw(18) << "Huffman Code"
+              << setw(8)  << "Length" << "\n"<< COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "------------------------------------------------------------------------\n" << COLOR_RESET;
 
     for (int i = 0; i < 256; ++i) {
         if (freq[i] > 0) {
             double pct = (totalBytes > 0) ? (static_cast<double>(freq[i]) / totalBytes * 100.0) : 0.0;
-            std::cout << std::left << std::setw(6)  << COLOR_GREEN << i
-                      << std::setw(24) << COLOR_SKY_BLUE << formatChar(static_cast<uint8_t>(i))
-                      << std::setw(14) << COLOR_WHITE << freq[i]
-                      << std::fixed << std::setprecision(2) << std::setw(10) << pct << "% "
-                      << std::setw(18) << codes[i]
-                      << std::setw(8)  << codes[i].length() << "\n" << COLOR_RESET;
+            cout << left << setw(6)  << COLOR_GREEN << i
+                      << setw(24) << COLOR_SKY_BLUE << formatChar(static_cast<uint8_t>(i))
+                      << setw(14) << COLOR_WHITE << freq[i]
+                      << fixed << setprecision(2) << setw(10) << pct << "% "
+                      << setw(18) << codes[i]
+                      << setw(8)  << codes[i].length() << "\n" << COLOR_RESET;
         }
     }
-    std::cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
 }
 //=========================================================================================
 
@@ -281,30 +286,30 @@ void displayCodeTable(const uint64_t freq[256], const std::string codes[256], ui
 
 //==============================================================================================
 // // Prints the Huffman Codebook table for Decompression based on reconstructed metadata.
-void displayDecompressionTable(const uint64_t freq[256], const std::string codes[256], uint64_t totalBytes) {
-    std::cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
-    std::cout << COLOR_WHITE << "                   DECOMPRESSION HUFFMAN TABLE                       \n" << COLOR_RESET;
-    std::cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
-    std::cout << COLOR_WHITE << std::left << std::setw(6)  << "Byte"
-              << std::setw(24) << "Character"
-              << std::setw(14) << "Restored Freq"
-              << std::setw(12) << "Percentage"
-              << std::setw(18) << "Decoded Code"
-              << std::setw(8)  << "Length" << COLOR_RESET << "\n";
-    std::cout << COLOR_SKY_BLUE << "------------------------------------------------------------------------\n" << COLOR_RESET;
+void displayDecompressionTable(const uint64_t freq[256], const string codes[256], uint64_t totalBytes) {
+    cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
+    cout << COLOR_WHITE << "                   DECOMPRESSION HUFFMAN TABLE                       \n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
+    cout << COLOR_WHITE << left << setw(6)  << "Byte"
+              << setw(24) << "Character"
+              << setw(14) << "Restored Freq"
+              << setw(12) << "Percentage"
+              << setw(18) << "Decoded Code"
+              << setw(8)  << "Length" << COLOR_RESET << "\n";
+    cout << COLOR_SKY_BLUE << "------------------------------------------------------------------------\n" << COLOR_RESET;
 
     for (int i = 0; i < 256; ++i) {
         if (freq[i] > 0) {
             double pct = (totalBytes > 0) ? (static_cast<double>(freq[i]) / totalBytes * 100.0) : 0.0;
-            std::cout << COLOR_GREEN << std::left << std::setw(6)  << COLOR_GREEN << i
-                      << std::setw(24) << COLOR_SKY_BLUE << formatChar(static_cast<uint8_t>(i))
-                      << std::setw(14) << COLOR_WHITE << freq[i]
-                      << std::fixed << std::setprecision(2) << std::setw(10) << pct << "% "
-                      << std::setw(18) << codes[i]
-                      << std::setw(8)  << codes[i].length() << "\n" << COLOR_RESET;
+            cout << COLOR_GREEN << left << setw(6)  << COLOR_GREEN << i
+                      << setw(24) << COLOR_SKY_BLUE << formatChar(static_cast<uint8_t>(i))
+                      << setw(14) << COLOR_WHITE << freq[i]
+                      << fixed << setprecision(2) << setw(10) << pct << "% "
+                      << setw(18) << codes[i]
+                      << setw(8)  << codes[i].length() << "\n" << COLOR_RESET;
         }
     }
-    std::cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
 }
 
 
@@ -315,13 +320,13 @@ void displayDecompressionTable(const uint64_t freq[256], const std::string codes
 // // Compresses an input text file into a binary .huff file.
 // // Encapsulates metadata (original file size, unique character frequency table)
 // // alongside the bit-packed payload.
-bool compressFile(const std::string& inputPath, const std::string& outputPath) {
+bool compressFile(const string& inputPath, const string& outputPath) {
     // // Step 1: Open source file in binary mode
-    std::ifstream inFile(inputPath, std::ios::binary);
+    ifstream inFile(inputPath, ios::binary);
     if (!inFile.is_open()) {
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-        std::cerr << COLOR_RED << "[!]" <<COLOR_WHITE<< " Error: Failed to open input file: " << inputPath << "\n";
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cerr << COLOR_RED << "[!]" <<COLOR_WHITE<< " Error: Failed to open input file: " << inputPath << "\n";
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
 
@@ -332,9 +337,9 @@ bool compressFile(const std::string& inputPath, const std::string& outputPath) {
     char buffer[4096];
 
     while (inFile.read(buffer, sizeof(buffer)) || inFile.gcount() > 0) {
-        std::streamsize bytesRead = inFile.gcount();
+        streamsize bytesRead = inFile.gcount();
         originalSize += bytesRead;
-        for (std::streamsize i = 0; i < bytesRead; ++i) {
+        for (streamsize i = 0; i < bytesRead; ++i) {
             freq[static_cast<uint8_t>(buffer[i])]++;
         }
     }
@@ -346,18 +351,18 @@ bool compressFile(const std::string& inputPath, const std::string& outputPath) {
             uniqueCharCount++;
         }
     }
-    std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "[+]" << COLOR_WHITE << " Character frequency analysis completed.\n";
-    std::cout << COLOR_GREEN <<"    Original File Size: "<< COLOR_WHITE << originalSize << " bytes\n";
-    std::cout << COLOR_GREEN <<"    Unique Characters:  "<< COLOR_WHITE << uniqueCharCount << "\n\n";
+    cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    cout << COLOR_GREEN << "[+]" << COLOR_WHITE << " Character frequency analysis completed.\n";
+    cout << COLOR_GREEN <<"    Original File Size: "<< COLOR_WHITE << originalSize << " bytes\n";
+    cout << COLOR_GREEN <<"    Unique Characters:  "<< COLOR_WHITE << uniqueCharCount << "\n\n";
 
     // // Step 3: Handle empty file edge case
     if (originalSize == 0) {
-        std::ofstream outFile(outputPath, std::ios::binary);
+        ofstream outFile(outputPath, ios::binary);
         if (!outFile.is_open()) {
-            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-            std::cerr << COLOR_RED << "[!]" << COLOR_WHITE << " Error: Cannot create output file: " << outputPath << "\n\n";
-            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+            cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+            cerr << COLOR_RED << "[!]" << COLOR_WHITE << " Error: Cannot create output file: " << outputPath << "\n\n";
+            cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
             return false;
         }
         // Write header indicating 0 bytes
@@ -368,53 +373,53 @@ bool compressFile(const std::string& inputPath, const std::string& outputPath) {
         outFile.write(reinterpret_cast<const char*>(&zeroSize), sizeof(zeroSize));
         outFile.write(reinterpret_cast<const char*>(&zeroUniq), sizeof(zeroUniq));
         outFile.close();
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-        std::cout << COLOR_RED << "[!]" << COLOR_WHITE << " Input file is empty. Generated empty compressed archive.\n" << COLOR_RESET;
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_RED << "[!]" << COLOR_WHITE << " Input file is empty. Generated empty compressed archive.\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return true;
     }
     //->loading bar for compression
     int totalWidth = 30;
-    std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-    std::cout << COLOR_WHITE << "Building Huffman tree & compressing file...\n\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    cout << COLOR_WHITE << "Building Huffman tree & compressing file...\n\n" << COLOR_RESET;
 
     for (int i = 0; i <= 100; i += 2) {
         int filledWidth = (i * totalWidth) / 100;
 
-        std::cout << "\r[";
+        cout << "\r[";
 
-        std::cout << COLOR_GREEN;
+        cout << COLOR_GREEN;
         for (int j = 0; j < filledWidth; ++j) {
-            std::cout << "=";
+            cout << "=";
         }
 
-        std::cout << COLOR_WHITE;
+        cout << COLOR_WHITE;
         for (int j = filledWidth; j < totalWidth; ++j) {
-            std::cout << " ";
+            cout << " ";
         }
 
-        std::cout << "] " << COLOR_GREEN << i << "%" << COLOR_WHITE << std::flush;
-        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        cout << "] " << COLOR_GREEN << i << "%" << COLOR_WHITE << flush;
+        Sleep(15);
     }
 
-    std::cout << "\n\n";
+    cout << "\n\n";
 
     // // Step 4: Build Huffman Tree from frequency counts
     HuffmanNode* root = buildHuffmanTree(freq);
 
     // // Step 5: Generate prefix-free variable-length binary codes
-    std::string codes[256];
+    string codes[256];
     generateHuffmanCodes(root, "", codes);
 
     // Display the codebook table for review
     displayCodeTable(freq, codes, originalSize);
 
     // // Step 6: Prepare output file and write header metadata
-    std::ofstream outFile(outputPath, std::ios::binary);
+    ofstream outFile(outputPath, ios::binary);
     if (!outFile.is_open()) {
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-        std::cerr << COLOR_RED << "[!]" << COLOR_WHITE << " Error: Cannot create output file: " << outputPath << "\n\n";
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cerr << COLOR_RED << "[!]" << COLOR_WHITE << " Error: Cannot create output file: " << outputPath << "\n\n";
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         delete root;
         return false;
     }
@@ -440,12 +445,12 @@ bool compressFile(const std::string& inputPath, const std::string& outputPath) {
 
     // // Step 7: Rewind input file and encode content into bitstream
     inFile.clear();               // Clear EOF and error flags
-    inFile.seekg(0, std::ios::beg); // Rewind to file beginning
+    inFile.seekg(0, ios::beg); // Rewind to file beginning
 
     BitWriter bitWriter(outFile);
     while (inFile.read(buffer, sizeof(buffer)) || inFile.gcount() > 0) {
-        std::streamsize bytesRead = inFile.gcount();
-        for (std::streamsize i = 0; i < bytesRead; ++i) {
+        streamsize bytesRead = inFile.gcount();
+        for (streamsize i = 0; i < bytesRead; ++i) {
             uint8_t ch = static_cast<uint8_t>(buffer[i]);
             bitWriter.writeBits(codes[ch]);
         }
@@ -468,17 +473,17 @@ bool compressFile(const std::string& inputPath, const std::string& outputPath) {
         spaceSaved = (1.0 - (static_cast<double>(compressedSize) / static_cast<double>(originalSize))) * 100.0;
     }
 
-    std::cout << COLOR_SKY_BLUE << "\n========================================================================\n\n" << COLOR_RESET;
-    std::cout << COLOR_WHITE << "                      COMPRESSION SUMMARY REPORT                        \n";
-    std::cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "  Original File:          " << COLOR_WHITE << inputPath << "\n";
-    std::cout << COLOR_GREEN << "  Compressed File:        " << COLOR_WHITE << outputPath << "\n";
-    std::cout << COLOR_GREEN << "  Original File Size:     " << COLOR_WHITE << originalSize << " bytes\n";
-    std::cout << COLOR_GREEN << "  Compressed File Size:   " << COLOR_WHITE << compressedSize << " bytes\n";
-    std::cout << COLOR_GREEN << "  Space Saved:            " << COLOR_WHITE << std::fixed << std::setprecision(2) << spaceSaved << " %\n";
-    std::cout << COLOR_GREEN << "  Compression Ratio:      " << COLOR_WHITE << std::fixed << std::setprecision(2)
+    cout << COLOR_SKY_BLUE << "\n========================================================================\n\n" << COLOR_RESET;
+    cout << COLOR_WHITE << "                      COMPRESSION SUMMARY REPORT                        \n";
+    cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
+    cout << COLOR_GREEN << "  Original File:          " << COLOR_WHITE << inputPath << "\n";
+    cout << COLOR_GREEN << "  Compressed File:        " << COLOR_WHITE << outputPath << "\n";
+    cout << COLOR_GREEN << "  Original File Size:     " << COLOR_WHITE << originalSize << " bytes\n";
+    cout << COLOR_GREEN << "  Compressed File Size:   " << COLOR_WHITE << compressedSize << " bytes\n";
+    cout << COLOR_GREEN << "  Space Saved:            " << COLOR_WHITE << fixed << setprecision(2) << spaceSaved << " %\n";
+    cout << COLOR_GREEN << "  Compression Ratio:      " << COLOR_WHITE << fixed << setprecision(2)
               << (compressedSize > 0 ? (static_cast<double>(originalSize) / compressedSize) : 0.0) << " : 1\n";
-    std::cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
 
     return true;
 }
@@ -490,22 +495,22 @@ bool compressFile(const std::string& inputPath, const std::string& outputPath) {
 // // Decompresses an encoded .huff file back into the exact original text.
 // // Reads header metadata, reconstructs the identical Huffman tree,
 // // and traverses the tree bit-by-bit to decode original characters.
-bool decompressFile(const std::string& inputPath, const std::string& outputPath) {
+bool decompressFile(const string& inputPath, const string& outputPath) {
     // // Step 1: Open compressed file in binary mode
-    std::ifstream inFile(inputPath, std::ios::binary);
+    ifstream inFile(inputPath, ios::binary);
     if (!inFile.is_open()) {
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-        std::cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Failed to open compressed file: " << inputPath << "\n\n" << COLOR_RESET;
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Failed to open compressed file: " << inputPath << "\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
 
     // // Step 2: Validate Header Magic Identifier
     char magic[4];
     if (!inFile.read(magic, 4) || magic[0] != 'H' || magic[1] != 'U' || magic[2] != 'F' || magic[3] != '1') {
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-        std::cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Invalid file format or corrupted header. Expected 'HUF1'.\n\n" << COLOR_RESET;
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Invalid file format or corrupted header. Expected 'HUF1'.\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
 
@@ -517,11 +522,11 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
 
     // Handle empty file edge case
     if (originalSize == 0) {
-        std::ofstream outFile(outputPath, std::ios::binary);
+        ofstream outFile(outputPath, ios::binary);
         outFile.close();
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-        std::cout << COLOR_GREEN << "[+]" << COLOR_WHITE << " Decompression completed: original file was empty (0 bytes).\n\n" << COLOR_RESET;
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_GREEN << "[+]" << COLOR_WHITE << " Decompression completed: original file was empty (0 bytes).\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return true;
     }
 
@@ -536,50 +541,50 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
     }
      //->loading bar for compression
     int totalWidth = 30;
-    std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-    std::cout << COLOR_WHITE << "Rebuilding Huffman tree & decompressing file...\n\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    cout << COLOR_WHITE << "Rebuilding Huffman tree & decompressing file...\n\n" << COLOR_RESET;
 
     for (int i = 0; i <= 100; i += 2) {
         int filledWidth = (i * totalWidth) / 100;
 
-        std::cout << "\r[";
+        cout << "\r[";
 
-        std::cout << COLOR_GREEN;
+        cout << COLOR_GREEN;
         for (int j = 0; j < filledWidth; ++j) {
-            std::cout << "=";
+            cout << "=";
         }
 
-        std::cout << COLOR_WHITE;
+        cout << COLOR_WHITE;
         for (int j = filledWidth; j < totalWidth; ++j) {
-            std::cout << " ";
+            cout << " ";
         }
 
-        std::cout << "] " << COLOR_GREEN << i << "%" << COLOR_WHITE << std::flush;
-        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        cout << "] " << COLOR_GREEN << i << "%" << COLOR_WHITE << flush;
+        Sleep(15);
     }
 
-    std::cout << "\n\n";
+    cout << "\n\n";
 
     // // Step 5: Rebuild the identical Huffman Tree
     HuffmanNode* root = buildHuffmanTree(freq);
     if (!root) {
-        std::cerr << COLOR_RED << "[!]" << COLOR_WHITE << " Error: Failed to reconstruct Huffman tree from header.\n" << COLOR_RESET;
+        cerr << COLOR_RED << "[!]" << COLOR_WHITE << " Error: Failed to reconstruct Huffman tree from header.\n" << COLOR_RESET;
         return false;
     }
 
     // // Generate Huffman codes from the reconstructed tree
-    std::string codes[256];
+    string codes[256];
     generateHuffmanCodes(root, "", codes);
 
     // // Display the restored Codebook Table
     displayDecompressionTable(freq, codes, originalSize);
 
     // // Step 6: Open output file for writing restored data
-    std::ofstream outFile(outputPath, std::ios::binary);
+    ofstream outFile(outputPath, ios::binary);
     if (!outFile.is_open()) {
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-        std::cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Cannot create restored output file: " << outputPath << "\n\n" << COLOR_RESET;
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Cannot create restored output file: " << outputPath << "\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         delete root;
         return false;
     }
@@ -591,7 +596,7 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
 
     // Buffer output writes for high performance
     const size_t OUT_BUFFER_SIZE = 4096;
-    std::vector<char> outBuffer;
+    vector<char> outBuffer;
     outBuffer.reserve(OUT_BUFFER_SIZE);
 
     // Stop exactly when all original bytes have been restored
@@ -599,9 +604,9 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
     while (decodedBytes < originalSize) {
         int bit = bitReader.readBit();
         if (bit == -1) {
-            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-            std::cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Unexpected EOF in bitstream before decoding all bytes.\n\n" << COLOR_RESET;
-            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+            cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+            cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Unexpected EOF in bitstream before decoding all bytes.\n\n" << COLOR_RESET;
+            cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
             delete root;
             return false;
         }
@@ -610,9 +615,9 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
         currentNode = (bit == 0) ? currentNode->left : currentNode->right;
 
         if (!currentNode) {
-            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-            std::cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Invalid bit encountered during Huffman tree traversal.\n\n" << COLOR_RESET;
-            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+            cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+            cerr << COLOR_RED<< "[!]"<< COLOR_WHITE << " Error: Invalid bit encountered during Huffman tree traversal.\n\n" << COLOR_RESET;
+            cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
             delete root;
             return false;
         }
@@ -644,15 +649,15 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
     outFile.close();
     delete root;
 
-    std::cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
-    std::cout << COLOR_WHITE << "                     DECOMPRESSION SUMMARY REPORT                       \n" << COLOR_RESET;
-    std::cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "  Input Encoded File:     " << COLOR_WHITE << inputPath << "\n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "  Restored Output File:   " << COLOR_WHITE << outputPath << "\n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "  Expected Bytes:         " << COLOR_WHITE << originalSize << " bytes\n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "  Decoded Bytes:          " << COLOR_WHITE << decodedBytes << " bytes\n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "  Status:                "  << COLOR_WHITE << "Successfully restored identical file!\n" << COLOR_RESET;
-    std::cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
+    cout << COLOR_WHITE << "                     DECOMPRESSION SUMMARY REPORT                       \n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
+    cout << COLOR_GREEN << "  Input Encoded File:     " << COLOR_WHITE << inputPath << "\n" << COLOR_RESET;
+    cout << COLOR_GREEN << "  Restored Output File:   " << COLOR_WHITE << outputPath << "\n" << COLOR_RESET;
+    cout << COLOR_GREEN << "  Expected Bytes:         " << COLOR_WHITE << originalSize << " bytes\n" << COLOR_RESET;
+    cout << COLOR_GREEN << "  Decoded Bytes:          " << COLOR_WHITE << decodedBytes << " bytes\n" << COLOR_RESET;
+    cout << COLOR_GREEN << "  Status:                "  << COLOR_WHITE << "Successfully restored identical file!\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
 
     return true;
 }
@@ -662,106 +667,106 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
 // ============================================================================
 
 // // Compares two files byte-by-byte to guarantee lossless reconstruction.
-bool verifyFileIntegrity(const std::string& originalPath, const std::string& decompressedPath) {
-    std::ifstream origFile(originalPath, std::ios::binary);
-    std::ifstream decompFile(decompressedPath, std::ios::binary);
+bool verifyFileIntegrity(const string& originalPath, const string& decompressedPath) {
+    ifstream origFile(originalPath, ios::binary);
+    ifstream decompFile(decompressedPath, ios::binary);
 
     if (!origFile.is_open()) {
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-        std::cerr << COLOR_RED <<"[!]" << COLOR_WHITE << " Error: Could not open original file: " << originalPath << "\n\n" << COLOR_RESET;
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cerr << COLOR_RED <<"[!]" << COLOR_WHITE << " Error: Could not open original file: " << originalPath << "\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
     if (!decompFile.is_open()) {
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-        std::cerr << COLOR_RED <<"[!]" << COLOR_WHITE << " Error: Could not open decompressed file: " << decompressedPath << "\n\n" << COLOR_RESET;
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cerr << COLOR_RED <<"[!]" << COLOR_WHITE << " Error: Could not open decompressed file: " << decompressedPath << "\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
     //loading bar for verification
     int totalWidth = 30;
-    std::cout << COLOR_SKY_BLUE << "\n-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-    std::cout << COLOR_WHITE << "Reading and verifying byte streams...\n  " << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "\n-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    cout << COLOR_WHITE << "Reading and verifying byte streams...\n  " << COLOR_RESET;
 
     for (int i = 0; i <= 100; i += 2) {
         int filledWidth = (i * totalWidth) / 100;
 
-        std::cout << "\r[";
+        cout << "\r[";
 
-        std::cout << COLOR_GREEN;
+        cout << COLOR_GREEN;
         for (int j = 0; j < filledWidth; ++j) {
-            std::cout << "=";
+            cout << "=";
         }
 
-        std::cout << COLOR_WHITE;
+        cout << COLOR_WHITE;
         for (int j = filledWidth; j < totalWidth; ++j) {
-            std::cout << " ";
+            cout << " ";
         }
 
-        std::cout << "] " << COLOR_GREEN << i << "%" << COLOR_WHITE << std::flush;
-        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        cout << "] " << COLOR_GREEN << i << "%" << COLOR_WHITE << flush;
+        Sleep(15);
     }
 
-    std::cout << "\n\n";
+    cout << "\n\n";
 
     // Compare file sizes first
-    origFile.seekg(0, std::ios::end);
-    decompFile.seekg(0, std::ios::end);
-    std::streamsize origSize = origFile.tellg();
-    std::streamsize decompSize = decompFile.tellg();
+    origFile.seekg(0, ios::end);
+    decompFile.seekg(0, ios::end);
+    streamsize origSize = origFile.tellg();
+    streamsize decompSize = decompFile.tellg();
     
 
-    std::cout << COLOR_SKY_BLUE << "\n========================================================================\n\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "\n========================================================================\n\n" << COLOR_RESET;
 
-    std::cout << COLOR_WHITE << "                       FILE INTEGRITY VERIFICATION                        \n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "      Decompression check: " << COLOR_WHITE << "Comparing original and decompressed files           \n\n" << COLOR_RESET;
+    cout << COLOR_WHITE << "                       FILE INTEGRITY VERIFICATION                        \n" << COLOR_RESET;
+    cout << COLOR_GREEN << "      Decompression check: " << COLOR_WHITE << "Comparing original and decompressed files           \n\n" << COLOR_RESET;
 
-    std::cout << COLOR_SKY_BLUE << "========================================================================   \n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "  Decompressed File:   " << COLOR_WHITE << decompressedPath << " (" << decompSize << " bytes)\n " << COLOR_RESET;
-    std::cout << COLOR_GREEN << "  Original File:       " << COLOR_WHITE << originalPath << " (" << origSize << " bytes)\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "========================================================================   \n" << COLOR_RESET;
+    cout << COLOR_GREEN << "  Decompressed File:   " << COLOR_WHITE << decompressedPath << " (" << decompSize << " bytes)\n " << COLOR_RESET;
+    cout << COLOR_GREEN << "  Original File:       " << COLOR_WHITE << originalPath << " (" << origSize << " bytes)\n" << COLOR_RESET;
 
     if (origSize != decompSize) {
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-        std::cout << COLOR_RED << "  [ERROR]" << COLOR_WHITE << " File sizes do NOT match! Lossless check failed.\n\n" << COLOR_RESET;
-        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        cout << COLOR_RED << "  [ERROR]" << COLOR_WHITE << " File sizes do NOT match! Lossless check failed.\n\n" << COLOR_RESET;
+        cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
 
     // Rewind and compare byte-by-byte
-    origFile.seekg(0, std::ios::beg);
-    decompFile.seekg(0, std::ios::beg);
+    origFile.seekg(0, ios::beg);
+    decompFile.seekg(0, ios::beg);
 
     char b1[4096], b2[4096];
     uint64_t byteOffset = 0;
 
     while (origFile.read(b1, sizeof(b1)) || origFile.gcount() > 0) {
-        std::streamsize bytesRead = origFile.gcount();
+        streamsize bytesRead = origFile.gcount();
         decompFile.read(b2, bytesRead);
 
         if (decompFile.gcount() != bytesRead) {
-            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-            std::cout << COLOR_RED << "  [ERROR]" << COLOR_WHITE << " Stream mismatch at byte offset " << byteOffset << "!\n\n" << COLOR_RESET;
-            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+            cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+            cout << COLOR_RED << "  [ERROR]" << COLOR_WHITE << " Stream mismatch at byte offset " << byteOffset << "!\n\n" << COLOR_RESET;
+            cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
             return false;
         }
 
-        for (std::streamsize i = 0; i < bytesRead; ++i) {
+        for (streamsize i = 0; i < bytesRead; ++i) {
             if (b1[i] != b2[i]) {
-                std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-                std::cout << COLOR_RED << "  [ERROR]" << COLOR_WHITE << " Character mismatch at byte " << (byteOffset + i) << "!\n" << COLOR_RESET;
-                std::cout << COLOR_GREEN << "         Original:     0x" << COLOR_WHITE << std::hex << static_cast<int>(static_cast<uint8_t>(b1[i])) << "\n";
-                std::cout << COLOR_GREEN << "         Decompressed: 0x" << COLOR_WHITE << std::hex << static_cast<int>(static_cast<uint8_t>(b2[i])) << std::dec << "\n";
-                std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+                cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+                cout << COLOR_RED << "  [ERROR]" << COLOR_WHITE << " Character mismatch at byte " << (byteOffset + i) << "!\n" << COLOR_RESET;
+                cout << COLOR_GREEN << "         Original:     0x" << COLOR_WHITE << hex << static_cast<int>(static_cast<uint8_t>(b1[i])) << "\n";
+                cout << COLOR_GREEN << "         Decompressed: 0x" << COLOR_WHITE << hex << static_cast<int>(static_cast<uint8_t>(b2[i])) << dec << "\n";
+                cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
                 return false;
             }
         }
         byteOffset += bytesRead;
     }
 
-    std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "  [PASS]" << COLOR_WHITE << " 100% MATCH: Every single byte is identical!\n" << COLOR_RESET;
-    std::cout << "\n";
-    std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    cout << COLOR_GREEN << "  [PASS]" << COLOR_WHITE << " 100% MATCH: Every single byte is identical!\n" << COLOR_RESET;
+    cout << "\n";
+    cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
     return true;
 }
 
@@ -770,31 +775,31 @@ bool verifyFileIntegrity(const std::string& originalPath, const std::string& dec
 // ============================================================================
 
 void printBanner() {
-    std::cout << COLOR_SKY_BLUE << "=========================================================================\n" << COLOR_RESET;
-    std::cout << "\n";
-    std::cout << COLOR_WHITE << "   TEXT FILE COMPRESSION AND DECOMPRESSION USING HUFFMAN CODING IN C++\n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "        Programmed by: "<<COLOR_WHITE<<"Vherleen Kail Aday and Abby Shane Daseco\n" << COLOR_RESET; 
-    std::cout << "\n";
-    std::cout << COLOR_SKY_BLUE << "=========================================================================\n" << COLOR_RESET;
-    std::cout << "\n";
+    cout << COLOR_SKY_BLUE << "=========================================================================\n" << COLOR_RESET;
+    cout << "\n";
+    cout << COLOR_WHITE << "   TEXT FILE COMPRESSION AND DECOMPRESSION USING HUFFMAN CODING IN C++\n" << COLOR_RESET;
+    cout << COLOR_GREEN << "        Programmed by: "<<COLOR_WHITE<<"Vherleen Kail Aday and Abby Shane Daseco\n" << COLOR_RESET;
+    cout << "\n";
+    cout << COLOR_SKY_BLUE << "=========================================================================\n" << COLOR_RESET;
+    cout << "\n";
 }
 
 void printMenu() {
-    std::cout << COLOR_SKY_BLUE << "Choose an operation:\n\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "Choose an operation:\n\n" << COLOR_RESET;
     
-    std::cout << COLOR_GREEN << "[1]" << COLOR_WHITE << " Compress a Text File "<<COLOR_GREEN<<"(.txt -> .huff)\n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "[2]" << COLOR_WHITE << " Decompress a File   "<<COLOR_GREEN<<"(.huff -> .txt)\n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "[3]" << COLOR_WHITE << " Verify File Integrity "<<COLOR_GREEN<<"(Compare Original vs Decompressed)\n" << COLOR_RESET;
-    std::cout << COLOR_GREEN << "[4]" << COLOR_WHITE << " Exit Program\n\n" << COLOR_RESET;
-    std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
-    std::cout << "\n" << COLOR_WHITE << "Enter your choice "<<COLOR_GREEN<<"(1-4) -> " << COLOR_RESET;
+    cout << COLOR_GREEN << "[1]" << COLOR_WHITE << " Compress a Text File "<<COLOR_GREEN<<"(.txt -> .huff)\n" << COLOR_RESET;
+    cout << COLOR_GREEN << "[2]" << COLOR_WHITE << " Decompress a File   "<<COLOR_GREEN<<"(.huff -> .txt)\n" << COLOR_RESET;
+    cout << COLOR_GREEN << "[3]" << COLOR_WHITE << " Verify File Integrity "<<COLOR_GREEN<<"(Compare Original vs Decompressed)\n" << COLOR_RESET;
+    cout << COLOR_GREEN << "[4]" << COLOR_WHITE << " Exit Program\n\n" << COLOR_RESET;
+    cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    cout << "\n" << COLOR_WHITE << "Enter your choice "<<COLOR_GREEN<<"(1-4) -> " << COLOR_RESET;
 }
 
 // Clean helper to read a line / path from console
-std::string promptFilePath(const std::string& prompt) {
-    std::cout << prompt;
-    std::string path;
-    std::getline(std::cin, path);
+string promptFilePath(const string& prompt) {
+    cout << prompt;
+    string path;
+    getline(cin, path);
     // Remove surrounding quotes if user copied path with quotes
     if (path.size() >= 2 && path.front() == '"' && path.back() == '"') {
         path = path.substr(1, path.size() - 2);
@@ -809,14 +814,14 @@ int main(int argc, char* argv[]) {
     //   huffman -d <input.huff> [output.txt]
     //   huffman -v <original.txt> <decompressed.txt>
     if (argc >= 2) {
-        std::string mode = argv[1];
+        string mode = argv[1];
         if (mode == "-c" && argc >= 3) {
-            std::string inPath = argv[2];
-            std::string outPath = (argc >= 4) ? argv[3] : (inPath + ".huff");
+            string inPath = argv[2];
+            string outPath = (argc >= 4) ? argv[3] : (inPath + ".huff");
             return compressFile(inPath, outPath) ? 0 : 1;
         } else if (mode == "-d" && argc >= 3) {
-            std::string inPath = argv[2];
-            std::string outPath;
+            string inPath = argv[2];
+            string outPath;
             if (argc >= 4) {
                 outPath = argv[3];
             } else {
@@ -828,11 +833,11 @@ int main(int argc, char* argv[]) {
         } else if (mode == "-v" && argc >= 4) {
             return verifyFileIntegrity(argv[2], argv[3]) ? 0 : 1;
         } else {
-            std::cout << COLOR_GREEN << "Usage:\n" << COLOR_RESET;
-            std::cout << COLOR_GREEN << "  Interactive Mode: " << COLOR_WHITE << argv[0] << "\n" << COLOR_RESET;
-            std::cout << COLOR_GREEN << "  CLI Compression:  " << COLOR_WHITE << argv[0] << " -c <input.txt> [output.huff]\n" << COLOR_RESET;
-            std::cout << COLOR_GREEN << "  CLI Decompression:" << COLOR_WHITE << argv[0] << " -d <input.huff> [output.txt]\n" << COLOR_RESET;
-            std::cout << COLOR_GREEN << "  CLI Verification: " << COLOR_WHITE << argv[0] << " -v <original> <decompressed>\n" << COLOR_RESET;
+            cout << COLOR_GREEN << "Usage:\n" << COLOR_RESET;
+            cout << COLOR_GREEN << "  Interactive Mode: " << COLOR_WHITE << argv[0] << "\n" << COLOR_RESET;
+            cout << COLOR_GREEN << "  CLI Compression:  " << COLOR_WHITE << argv[0] << " -c <input.txt> [output.huff]\n" << COLOR_RESET;
+            cout << COLOR_GREEN << "  CLI Decompression:" << COLOR_WHITE << argv[0] << " -d <input.huff> [output.txt]\n" << COLOR_RESET;
+            cout << COLOR_GREEN << "  CLI Verification: " << COLOR_WHITE << argv[0] << " -v <original> <decompressed>\n" << COLOR_RESET;
             return 1;
         }
     }
@@ -843,8 +848,8 @@ int main(int argc, char* argv[]) {
     bool running = true;
     while (running) {
         printMenu();
-        std::string choiceStr;
-        if (!std::getline(std::cin, choiceStr)) {
+        string choiceStr;
+        if (!getline(cin, choiceStr)) {
             break;
         }
 
@@ -853,15 +858,15 @@ int main(int argc, char* argv[]) {
 
         switch (choice) {
             case '1': {
-                std::string inPath = promptFilePath("Enter path to input text file -> ");
+                string inPath = promptFilePath("Enter path to input text file -> ");
                 if (inPath.empty() || !fs::exists(inPath)) {
-                    std::cerr << COLOR_RED << "[!]" << COLOR_WHITE <<  "Error: Input file does not exist.\n" << COLOR_RESET;
+                    cerr << COLOR_RED << "[!]" << COLOR_WHITE <<  "Error: Input file does not exist.\n" << COLOR_RESET;
                     break;
                 }
-                std::string defaultOut = inPath + ".huff";
-                std::cout << "Please click enter for the output file path [default: " << defaultOut << "]-> ";
-                std::string outPath;
-                std::getline(std::cin, outPath);
+                string defaultOut = inPath + ".huff";
+                cout << "Please click enter for the output file path [default: " << defaultOut << "]-> ";
+                string outPath;
+                getline(cin, outPath);
                 if (outPath.empty()) {
                     outPath = defaultOut;
                 }
@@ -869,20 +874,20 @@ int main(int argc, char* argv[]) {
                 break;
             }
             case '2': {
-                std::string inPath = promptFilePath("Enter path to compressed .huff file -> ");
+                string inPath = promptFilePath("Enter path to compressed .huff file -> ");
                 if (inPath.empty() || !fs::exists(inPath)) {
-                    std::cerr << COLOR_RED << "[!]" << COLOR_WHITE << "Error: File does not exist.\n" << COLOR_RESET;
+                    cerr << COLOR_RED << "[!]" << COLOR_WHITE << "Error: File does not exist.\n" << COLOR_RESET;
                     break;
                 }
-                std::string defaultOut;
+                string defaultOut;
                 if (inPath.size() >= 5 && inPath.substr(inPath.size() - 5) == ".huff") {
                     defaultOut = inPath.substr(0, inPath.size() - 5) + "_decompressed.txt";
                 } else {
                     defaultOut = inPath + "_decompressed.txt";
                 }
-                std::cout << "Please click enter for the output file path [default: " << defaultOut << "]-> ";
-                std::string outPath;
-                std::getline(std::cin, outPath);
+                cout << "Please click enter for the output file path [default: " << defaultOut << "]-> ";
+                string outPath;
+                getline(cin, outPath);
                 if (outPath.empty()) {
                     outPath = defaultOut;
                 }
@@ -890,18 +895,18 @@ int main(int argc, char* argv[]) {
                 break;
             }
             case '3': {
-                std::string origPath = promptFilePath("Enter path to original file -> ");
-                std::string decompPath = promptFilePath("Enter path to decompressed file -> ");
+                string origPath = promptFilePath("Enter path to original file -> ");
+                string decompPath = promptFilePath("Enter path to decompressed file -> ");
                 verifyFileIntegrity(origPath, decompPath);
                 break;
             }
             case '4': {
-                std::cout << COLOR_GREEN << "\nExiting Huffman Utility. Thank you for using our program!\n" << COLOR_RESET;
+                cout << COLOR_GREEN << "\nExiting Huffman Utility. Thank you for using our program!\n" << COLOR_RESET;
                 running = false;
                 break;
             }
             default: {
-                std::cout << COLOR_RED << "[!]" << COLOR_WHITE << " Invalid choice. Please enter 1, 2, 3, or 4.\n" << COLOR_RESET;
+                cout << COLOR_RED << "[!]" << COLOR_WHITE << " Invalid choice. Please enter 1, 2, 3, or 4.\n" << COLOR_RESET;
                 break;
             }
         }
