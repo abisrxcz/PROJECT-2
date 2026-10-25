@@ -252,7 +252,7 @@ std::string formatChar(uint8_t ch) {
 // // Prints the Huffman Codebook table and frequency breakdown for analysis.
 void displayCodeTable(const uint64_t freq[256], const std::string codes[256], uint64_t totalBytes) {
     std::cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
-    std::cout << COLOR_WHITE << "                      HUFFMAN CODEBOOK TABLE                           \n" << COLOR_RESET;
+    std::cout << COLOR_WHITE << "                      COMPRESSION HUFFMAN TABLE                           \n" << COLOR_RESET;
     std::cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
     std::cout << COLOR_WHITE << std::left << std::setw(6)  << "Byte"
               << std::setw(24) << "Character"
@@ -277,13 +277,13 @@ void displayCodeTable(const uint64_t freq[256], const std::string codes[256], ui
 }
 //=========================================================================================
 
-//SECTION 3-B DECOMPRESSION CODEBOOK DISPLAY
+//SECTION 3-B: DECOMPRESSION TABLE DISPLAY
 
 //==============================================================================================
 // // Prints the Huffman Codebook table for Decompression based on reconstructed metadata.
 void displayDecompressionTable(const uint64_t freq[256], const std::string codes[256], uint64_t totalBytes) {
     std::cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
-    std::cout << COLOR_WHITE << "                   DECOMPRESSION HUFFMAN CODEBOOK                       \n" << COLOR_RESET;
+    std::cout << COLOR_WHITE << "                   DECOMPRESSION HUFFMAN TABLE                       \n" << COLOR_RESET;
     std::cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
     std::cout << COLOR_WHITE << std::left << std::setw(6)  << "Byte"
               << std::setw(24) << "Character"
