@@ -471,9 +471,9 @@ bool compressFile(const string& inputPath, const string& outputPath) {
     return true;
 }
 
-// ============================================================================
+
 // SECTION 5: FILE DECOMPRESSION
-// ============================================================================
+
 
 //-> Decompresses a .huff archive by reading its metadata, rebuilding the Huffman tree,
 //-> and decoding the packed bits until the original number of bytes is restored.
@@ -643,9 +643,9 @@ bool decompressFile(const string& inputPath, const string& outputPath) {
     return true;
 }
 
-// ============================================================================
-// SECTION 6: FILE INTEGRITY VERIFICATION (LOSSLESS PROOF)
-// ============================================================================
+
+// -> SECTION 6: FILE INTEGRITY VERIFICATION (LOSSLESS PROOF)
+
 
 //-> Compares the original and decompressed files to confirm that every byte matches.
 bool verifyFileIntegrity(const string& originalPath, const string& decompressedPath) {
@@ -757,9 +757,9 @@ bool verifyFileIntegrity(const string& originalPath, const string& decompressedP
     return true;
 }
 
-// ============================================================================
-// SECTION 7: INTERACTIVE CONSOLE MENU & CLI DISPATCHER
-// ============================================================================
+
+// -> SECTION 7: INTERACTIVE CONSOLE MENU & CLI DISPATCHER
+
 
 //-> Prints the program title and author information at the start of interactive mode
 void printBanner() {
