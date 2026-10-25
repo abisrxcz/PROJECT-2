@@ -475,11 +475,10 @@ bool compressFile(const string& inputPath, const string& outputPath) {
 // SECTION 5: FILE DECOMPRESSION
 // ============================================================================
 
-// // Decompresses an encoded .huff file back into the exact original text.
-// // Reads header metadata, reconstructs the identical Huffman tree,
-// // and traverses the tree bit-by-bit to decode original characters.
+//-> Decompresses a .huff archive by reading its metadata, rebuilding the Huffman tree,
+//-> and decoding the packed bits until the original number of bytes is restored.
 bool decompressFile(const string& inputPath, const string& outputPath) {
-    // // Step 1: Open compressed file in binary mode
+    //-> [Open the compressed input file in binary mode]
     ifstream inFile(inputPath, ios::binary);
     if (!inFile.is_open()) {
         cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
@@ -488,7 +487,7 @@ bool decompressFile(const string& inputPath, const string& outputPath) {
         return false;
     }
 
-    // // Step 2: Validate Header Magic Identifier
+    //-> Read and validate the four-byte signature so unrelated files are not decoded as Huffman archives
     char magic[4];
     if (!inFile.read(magic, 4) || magic[0] != 'H' || magic[1] != 'U' || magic[2] != 'F' || magic[3] != '1') {
         cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
@@ -497,13 +496,13 @@ bool decompressFile(const string& inputPath, const string& outputPath) {
         return false;
     }
 
-    // // Step 3: Read original file size and unique character count
+    //-> Read the original byte count and number of distinct byte values stored in the archive
     uint64_t originalSize = 0;
     uint16_t uniqueCharCount = 0;
     inFile.read(reinterpret_cast<char*>(&originalSize), sizeof(originalSize));
     inFile.read(reinterpret_cast<char*>(&uniqueCharCount), sizeof(uniqueCharCount));
 
-    // Handle empty file edge case
+    //-> An empty source file has no tree or encoded payload, so create an empty output and finish
     if (originalSize == 0) {
         ofstream outFile(outputPath, ios::binary);
         outFile.close();
@@ -513,7 +512,7 @@ bool decompressFile(const string& inputPath, const string& outputPath) {
         return true;
     }
 
-    // // Step 4: Reconstruct frequency table from header metadata
+    //-> Restore each byte's frequency from the archive; these counts are used to rebuild the same tree
     uint64_t freq[256] = {0};
     for (uint16_t i = 0; i < uniqueCharCount; ++i) {
         uint8_t ch = 0;
@@ -522,7 +521,7 @@ bool decompressFile(const string& inputPath, const string& outputPath) {
         inFile.read(reinterpret_cast<char*>(&count), sizeof(count));
         freq[ch] = count;
     }
-     //->loading bar for compression
+    //-> Show progress feedback while preparing to rebuild the tree and decode the data
     int totalWidth = 30;
     cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
     cout << COLOR_WHITE << "Rebuilding Huffman tree & decompressing file...\n\n" << COLOR_RESET;
@@ -548,21 +547,21 @@ bool decompressFile(const string& inputPath, const string& outputPath) {
 
     cout << "\n\n";
 
-    // // Step 5: Rebuild the identical Huffman Tree
+    //-> Reconstruct the tree from the stored frequencies using the same deterministic rules as compression
     HuffmanNode* root = buildHuffmanTree(freq);
     if (!root) {
         cerr << COLOR_RED << "[!]" << COLOR_WHITE << " Error: Failed to reconstruct Huffman tree from header.\n" << COLOR_RESET;
         return false;
     }
 
-    // // Generate Huffman codes from the reconstructed tree
+    //-> Generate codes for the display table; decoding itself follows the tree one bit at a time
     string codes[256];
     generateHuffmanCodes(root, "", codes);
 
-    // // Display the restored Codebook Table
+    //-> Display the character frequencies and codes represented by the archive metadata
     displayDecompressionTable(freq, codes, originalSize);
 
-    // // Step 6: Open output file for writing restored data
+    //-> Open the destination file in binary mode so every original byte value is preserved
     ofstream outFile(outputPath, ios::binary);
     if (!outFile.is_open()) {
         cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
@@ -572,18 +571,17 @@ bool decompressFile(const string& inputPath, const string& outputPath) {
         return false;
     }
 
-    // // Step 7: Decode bitstream by traversing the tree
+    //-> Read packed bits and follow the matching left ('0') or right ('1') branch in the Huffman tree
     BitReader bitReader(inFile);
-    uint64_t decodedBytes = 0;
-    HuffmanNode* currentNode = root;
+    uint64_t decodedBytes = 0; //-> Tracks how many original bytes have been recovered
+    HuffmanNode* currentNode = root; //-> Tracks the current position while traversing the tree
 
-    // Buffer output writes for high performance
+    //-> Buffer decoded bytes to reduce the number of writes to the output file
     const size_t OUT_BUFFER_SIZE = 4096;
     vector<char> outBuffer;
     outBuffer.reserve(OUT_BUFFER_SIZE);
 
-    // Stop exactly when all original bytes have been restored
-    // (This guarantees trailing padding bits in the final byte are ignored)
+    //-> Stop after restoring the recorded original size so padding bits at the end are not decoded as data
     while (decodedBytes < originalSize) {
         int bit = bitReader.readBit();
         if (bit == -1) {
@@ -594,7 +592,7 @@ bool decompressFile(const string& inputPath, const string& outputPath) {
             return false;
         }
 
-        // Branch left on '0', right on '1'
+        //-> Follow the branch represented by the next bit; a missing branch means the archive data is invalid
         currentNode = (bit == 0) ? currentNode->left : currentNode->right;
 
         if (!currentNode) {
@@ -605,33 +603,33 @@ bool decompressFile(const string& inputPath, const string& outputPath) {
             return false;
         }
 
-        // When a leaf node is reached, output its character
+        //-> A leaf marks a complete character code, so append its byte and restart at the root
         if (currentNode->isLeaf()) {
             outBuffer.push_back(static_cast<char>(currentNode->character));
             decodedBytes++;
 
-            // Flush buffer when full
+            //-> Write a full buffer before continuing to collect decoded bytes
             if (outBuffer.size() >= OUT_BUFFER_SIZE) {
                 outFile.write(outBuffer.data(), outBuffer.size());
                 outBuffer.clear();
             }
 
-            // Reset tree pointer back to root for the next character
             currentNode = root;
         }
     }
 
-    // Write any remaining buffered characters
+    //-> Write any decoded bytes remaining in the buffer after the final character
     if (!outBuffer.empty()) {
         outFile.write(outBuffer.data(), outBuffer.size());
         outBuffer.clear();
     }
 
-    // Close files and free tree memory
+    //-> Close both streams and release the dynamically allocated Huffman tree
     inFile.close();
     outFile.close();
     delete root;
 
+    //-> Report the output paths and confirm the number of bytes restored
     cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
     cout << COLOR_WHITE << "                     DECOMPRESSION SUMMARY REPORT                       \n\n" << COLOR_RESET;
     cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
@@ -649,11 +647,13 @@ bool decompressFile(const string& inputPath, const string& outputPath) {
 // SECTION 6: FILE INTEGRITY VERIFICATION (LOSSLESS PROOF)
 // ============================================================================
 
-// // Compares two files byte-by-byte to guarantee lossless reconstruction.
+//-> Compares the original and decompressed files to confirm that every byte matches.
 bool verifyFileIntegrity(const string& originalPath, const string& decompressedPath) {
+    //-> Open both files in binary mode so the comparison includes all byte values without text conversion
     ifstream origFile(originalPath, ios::binary);
     ifstream decompFile(decompressedPath, ios::binary);
 
+    //-> Stop with a clear error if either file cannot be opened for comparison
     if (!origFile.is_open()) {
         cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         cerr << COLOR_RED <<"[!]" << COLOR_WHITE << " Error: Could not open original file: " << originalPath << "\n\n" << COLOR_RESET;
@@ -666,7 +666,8 @@ bool verifyFileIntegrity(const string& originalPath, const string& decompressedP
         cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
-    //loading bar for verification
+
+    //-> Show progress feedback before beginning the byte comparison
     int totalWidth = 30;
     cout << COLOR_SKY_BLUE << "\n-------------------------------------------------------------------------\n\n" << COLOR_RESET;
     cout << COLOR_WHITE << "Reading and verifying byte streams...\n  " << COLOR_RESET;
@@ -692,7 +693,7 @@ bool verifyFileIntegrity(const string& originalPath, const string& decompressedP
 
     cout << "\n\n";
 
-    // Compare file sizes first
+    //-> Check file sizes first; unequal sizes prove the files cannot be identical
     origFile.seekg(0, ios::end);
     decompFile.seekg(0, ios::end);
     streamsize origSize = origFile.tellg();
@@ -715,13 +716,14 @@ bool verifyFileIntegrity(const string& originalPath, const string& decompressedP
         return false;
     }
 
-    // Rewind and compare byte-by-byte
+    //-> Rewind both streams and compare matching-sized chunks from the beginning
     origFile.seekg(0, ios::beg);
     decompFile.seekg(0, ios::beg);
 
     char b1[4096], b2[4096];
-    uint64_t byteOffset = 0;
+    uint64_t byteOffset = 0; //-> Tracks the absolute position for reporting a mismatch
 
+    //-> Read the original file in chunks and require the decompressed file to provide the same number of bytes
     while (origFile.read(b1, sizeof(b1)) || origFile.gcount() > 0) {
         streamsize bytesRead = origFile.gcount();
         decompFile.read(b2, bytesRead);
@@ -733,6 +735,7 @@ bool verifyFileIntegrity(const string& originalPath, const string& decompressedP
             return false;
         }
 
+        //-> Compare each byte in the current chunk and report the first differing offset and values
         for (streamsize i = 0; i < bytesRead; ++i) {
             if (b1[i] != b2[i]) {
                 cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
@@ -743,9 +746,10 @@ bool verifyFileIntegrity(const string& originalPath, const string& decompressedP
                 return false;
             }
         }
-        byteOffset += bytesRead;
+        byteOffset += bytesRead; //-> Advance the absolute offset before reading the next chunk
     }
 
+    //-> Reaching the end without a mismatch confirms that the files are identical
     cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
     cout << COLOR_GREEN << "  [PASS]" << COLOR_WHITE << " 100% MATCH: Every single byte is identical!\n" << COLOR_RESET;
     cout << "\n";
@@ -757,6 +761,7 @@ bool verifyFileIntegrity(const string& originalPath, const string& decompressedP
 // SECTION 7: INTERACTIVE CONSOLE MENU & CLI DISPATCHER
 // ============================================================================
 
+//-> Prints the program title and author information at the start of interactive mode
 void printBanner() {
     cout << COLOR_SKY_BLUE << "=========================================================================\n" << COLOR_RESET;
     cout << "\n";
@@ -767,6 +772,7 @@ void printBanner() {
     cout << "\n";
 }
 
+//-> Displays the available interactive operations and prompts the user to choose one
 void printMenu() {
     cout << COLOR_SKY_BLUE << "Choose an operation:\n\n" << COLOR_RESET;
     
@@ -778,12 +784,11 @@ void printMenu() {
     cout << "\n" << COLOR_WHITE << "Enter your choice "<<COLOR_GREEN<<"(1-4) -> " << COLOR_RESET;
 }
 
-// Clean helper to read a line / path from console
+//-> Prompts for a full file path and removes surrounding quotes copied from a file browser
 string promptFilePath(const string& prompt) {
     cout << prompt;
     string path;
     getline(cin, path);
-    // Remove surrounding quotes if user copied path with quotes
     if (path.size() >= 2 && path.front() == '"' && path.back() == '"') {
         path = path.substr(1, path.size() - 2);
     }
@@ -791,31 +796,32 @@ string promptFilePath(const string& prompt) {
 }
 
 int main(int argc, char* argv[]) {
-    // // Support command-line arguments for automated testing / CLI workflows
-    // Usage:
-    //   huffman -c <input.txt> [output.huff]
-    //   huffman -d <input.huff> [output.txt]
-    //   huffman -v <original.txt> <decompressed.txt>
+    //-> If command-line arguments are provided, dispatch the requested operation without showing the menu
     if (argc >= 2) {
-        string mode = argv[1];
+        string mode = argv[1]; //-> First argument selects compression, decompression, or verification
         if (mode == "-c" && argc >= 3) {
+            //-> Compress the specified input; default the output name to the input path with ".huff" appended
             string inPath = argv[2];
             string outPath = (argc >= 4) ? argv[3] : (inPath + ".huff");
             return compressFile(inPath, outPath) ? 0 : 1;
         } else if (mode == "-d" && argc >= 3) {
+            //-> Decompress the specified archive, using an explicit output path when one is supplied
             string inPath = argv[2];
             string outPath;
             if (argc >= 4) {
                 outPath = argv[3];
             } else {
+                //-> Remove the ".huff" suffix when present; otherwise append ".out" for the default output
                 bool endsWithHuff = (inPath.length() >= 5 && inPath.substr(inPath.length() - 5) == ".huff");
                 outPath = endsWithHuff ? inPath.substr(0, inPath.length() - 5) + "_decompressed.txt"
                                        : inPath + ".out";
             }
             return decompressFile(inPath, outPath) ? 0 : 1;
         } else if (mode == "-v" && argc >= 4) {
+            //-> Verify the original and decompressed paths supplied as the second and third arguments
             return verifyFileIntegrity(argv[2], argv[3]) ? 0 : 1;
         } else {
+            //-> Show valid command formats when the operation or its required arguments are missing
             cout << COLOR_GREEN << "Usage:\n" << COLOR_RESET;
             cout << COLOR_GREEN << "  Interactive Mode: " << COLOR_WHITE << argv[0] << "\n" << COLOR_RESET;
             cout << COLOR_GREEN << "  CLI Compression:  " << COLOR_WHITE << argv[0] << " -c <input.txt> [output.huff]\n" << COLOR_RESET;
@@ -825,7 +831,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // // Interactive Console Mode
+    //-> With no CLI operation selected, start the interactive menu loop
     printBanner();
 
     bool running = true;
@@ -833,19 +839,24 @@ int main(int argc, char* argv[]) {
         printMenu();
         string choiceStr;
         if (!getline(cin, choiceStr)) {
+            //-> Leave the menu if input ends or the user closes the input stream
             break;
         }
 
+        //-> Ignore blank entries and use the first character as the menu selection
         if (choiceStr.empty()) continue;
         char choice = choiceStr[0];
 
+        //-> Run the operation corresponding to the selected menu option
         switch (choice) {
             case '1': {
+                //-> Request and validate the source file path before compression
                 string inPath = promptFilePath("Enter path to input text file -> ");
                 if (inPath.empty() || !fs::exists(inPath)) {
                     cerr << COLOR_RED << "[!]" << COLOR_WHITE <<  "Error: Input file does not exist.\n" << COLOR_RESET;
                     break;
                 }
+                //-> Offer the conventional ".huff" output name while allowing the user to enter a different path
                 string defaultOut = inPath + ".huff";
                 cout << "Please click enter for the output file path [default: " << defaultOut << "]-> ";
                 string outPath;
@@ -857,11 +868,13 @@ int main(int argc, char* argv[]) {
                 break;
             }
             case '2': {
+                //-> Request and validate the compressed archive path before decompression
                 string inPath = promptFilePath("Enter path to compressed .huff file -> ");
                 if (inPath.empty() || !fs::exists(inPath)) {
                     cerr << COLOR_RED << "[!]" << COLOR_WHITE << "Error: File does not exist.\n" << COLOR_RESET;
                     break;
                 }
+                //-> Create a readable default restored filename based on whether the input ends in ".huff"
                 string defaultOut;
                 if (inPath.size() >= 5 && inPath.substr(inPath.size() - 5) == ".huff") {
                     defaultOut = inPath.substr(0, inPath.size() - 5) + "_decompressed.txt";
@@ -878,22 +891,24 @@ int main(int argc, char* argv[]) {
                 break;
             }
             case '3': {
+                //-> Collect both file paths and compare their contents for an exact byte match
                 string origPath = promptFilePath("Enter path to original file -> ");
                 string decompPath = promptFilePath("Enter path to decompressed file -> ");
                 verifyFileIntegrity(origPath, decompPath);
                 break;
             }
             case '4': {
+                //-> Stop the menu loop so the program can exit normally
                 cout << COLOR_GREEN << "\nExiting Huffman Utility. Thank you for using our program!\n" << COLOR_RESET;
                 running = false;
                 break;
             }
             default: {
+                //-> Inform the user when the entered selection is not one of the listed options
                 cout << COLOR_RED << "[!]" << COLOR_WHITE << " Invalid choice. Please enter 1, 2, 3, or 4.\n" << COLOR_RESET;
                 break;
             }
         }
     }
-
     return 0;
 }
