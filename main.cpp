@@ -8,10 +8,6 @@
 #include <cstdio>
 #include <iomanip>
 #include <algorithm>
-
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
 #include <windows.h>
 
 using namespace std;
