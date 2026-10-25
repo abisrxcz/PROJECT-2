@@ -1,3 +1,6 @@
+//DSA - PROJECT 2: FILE COMPRESSION AND DECOMPRESSION USING HUFFMAN CODING
+//Programmed by: Vherleen Kail Aday and Abby Shane Daseco
+
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -32,77 +35,74 @@ inline uint64_t file_size(const string& path) {
 }
 }
 
-// ============================================================================
-// SECTION 1: HUFFMAN TREE DATA STRUCTURES
-// ============================================================================
 
-// // HuffmanNode represents an individual node in the binary Huffman Tree.
-// // It can either be a leaf node (holding a character) or an internal node
-// // (combining two child subtrees).
+
+// -> SECTION 1: HUFFMAN TREE DATA STRUCTURES
+
+
+
+//-> Creating a node that represents an individual node in the binary Huffman Tree.
 struct HuffmanNode {
-    uint8_t character;       // Byte value (0-255) stored in leaf nodes
-    uint64_t frequency;      // Occurrence count of the character or subtree
-    uint8_t minChar;         // Smallest character in this subtree (used for deterministic tie-breaking)
-    HuffmanNode* left;       // Pointer to left child (represents bit '0')
-    HuffmanNode* right;      // Pointer to right child (represents bit '1')
+    uint8_t character;       //-> Byte value
+    uint64_t frequency;      //-> number of character
+    uint8_t minChar;         //-> Smallest character in this subtree
+    HuffmanNode* left;       //-> Pointer to left child -> represents bit '0'
+    HuffmanNode* right;      //-> Pointer to right child -> represents bit '1'
 
-    // // Constructor for leaf nodes: stores the character and its frequency.
+    //-> Constructor for leaf nodes: stores charac and frequency
     HuffmanNode(uint8_t ch, uint64_t freq)
         : character(ch), frequency(freq), minChar(ch), left(nullptr), right(nullptr) {}
 
-    // // Constructor for internal nodes: combines two child subtrees with their sum of frequencies.
+    //->Constructor for internal nodes: combines two child subtrees with their sum of frequencies
     HuffmanNode(uint64_t freq, uint8_t minC, HuffmanNode* l, HuffmanNode* r)
         : character(0), frequency(freq), minChar(minC), left(l), right(r) {}
 
-    // // Recursive destructor to automatically clean up tree memory and prevent leaks.
+    //-> Destructor to automatically clean up tree memory and prevent leaks.
     ~HuffmanNode() {
         delete left;
         delete right;
     }
 
-    // // Helper method to check if the node is a leaf (contains an actual character).
+    //-> Helper method to check if the node is a leaf -> means it represents an actual character rather than an internal node.
     bool isLeaf() const {
         return left == nullptr && right == nullptr;
     }
 };
 
-// // CompareNode is a functor used by priority_queue to build a Min-Heap.
-// // Nodes with smaller frequencies are given higher priority (pop first).
-// // If frequencies are equal, deterministic tie-breaking compares minChar.
+//-> Node comparison for priority queue: lower frequency has higher priority, and tie-breaker is minChar.
 struct CompareNode {
     bool operator()(const HuffmanNode* a, const HuffmanNode* b) const {
-        // // Primary criterion: lowest frequency comes first
+        //-> Primary criteria: frequency -> lower frequency has higher priority
         if (a->frequency != b->frequency) {
             return a->frequency > b->frequency;
         }
-        // // Secondary criterion: deterministic tie-breaker based on minimum character
+        //-> Secondary criteria: minChar -> lower character value has higher priority
         return a->minChar > b->minChar;
     }
 };
 
-// ============================================================================
-// SECTION 2: BIT-LEVEL I/O STREAMS (BIT PACKING & UNPACKING)
-// ============================================================================
 
-// // BitWriter buffers variable-length Huffman bit codes into 8-bit bytes (uint8_t)
-// // so they can be written directly to disk as raw binary data.
+// -> SECTION 2: BIT-LEVEL I/O STREAMS (BIT PACKING & UNPACKING)
+
+
+// -> this class handles bit-level writing to a binary output stream -> it accumulates bits into bytes and writes them to disk
 class BitWriter {
 private:
-    ofstream& out;  // Target binary output file stream
-    uint8_t buffer;      // 8-bit accumulator holding bits until full
-    int bitCount;        // Number of bits currently stored in the buffer (0 to 8)
+    ofstream& out;  //-> Target binary output file stream
+    uint8_t buffer;      //-> 8-bit accumulator holding bits until full
+    int bitCount;        //-> Number of bits currently stored in the buffer -> 0 to 8
 
 public:
     explicit BitWriter(ofstream& stream)
         : out(stream), buffer(0), bitCount(0) {}
 
-    // // Writes a single bit (0 or 1) into the byte accumulator.
+    //-> This function writes a single bit -> 0 or 1 -> into the byte accumulator.
     void writeBit(int bit) {
-        // Shift existing bits to the left and insert the new bit at the LSB position
+        //-> Shift existing bits to the left and insert the new bit at the least significant position
         buffer = (buffer << 1) | (bit & 1);
         bitCount++;
 
-        // When 8 bits are accumulated, write the full byte to disk and reset
+        //-> When 8 bits are accumulated, write the full byte to disk and reset
         if (bitCount == 8) {
             out.put(static_cast<char>(buffer));
             buffer = 0;
@@ -110,18 +110,17 @@ public:
         }
     }
 
-    // // Iterates through a binary string (e.g., "10110") and writes each bit.
+    //-> This function iterates through a binary string and writes each bit
     void writeBits(const string& bitString) {
         for (char c : bitString) {
             writeBit(c == '1' ? 1 : 0);
         }
     }
 
-    // // Flushes any remaining bits in the buffer when encoding finishes.
-    // // Left-shifts remaining bits so the final partial byte is properly padded.
+    //-> This function flushes any remaining bits in the buffer to disk, padding with zeros if necessary
     void flush() {
         if (bitCount > 0) {
-            buffer <<= (8 - bitCount); // Pad remaining trailing bits with zeros
+            buffer <<= (8 - bitCount); // Pad remaining bits with zeros on the right
             out.put(static_cast<char>(buffer));
             buffer = 0;
             bitCount = 0;
@@ -129,46 +128,43 @@ public:
     }
 };
 
-// // BitReader reads raw binary bytes from disk and provides bit-by-bit access
-// // for traversing the Huffman tree during decompression.
+// -> This class handles bit-level reading from a binary input stream -> it unpacks bits from bytes read from disk
 class BitReader {
 private:
-    ifstream& in;   // Source binary input file stream
-    uint8_t buffer;      // 8-bit byte currently being unpacked
-    int bitPos;          // Next bit position to extract (7 down to 0, or -1 if empty)
+    ifstream& in;   //-> Source binary input file stream
+    uint8_t buffer;      //-> 8-bit byte currently being unpacked
+    int bitPos;          //-> Next bit position to extract (7 down to 0, or -1 if empty)
 
 public:
     explicit BitReader(ifstream& stream)
         : in(stream), buffer(0), bitPos(-1) {}
 
-    // // Reads the next bit from the stream.
-    // // Returns 0 or 1, or -1 if the end of file (EOF) is reached.
+    //-> This function reads the next bit from the stream
     int readBit() {
-        // If the current byte buffer has been exhausted, read the next byte from disk
+        //-> If all bits in the current byte have been read, fetch the next byte from the stream
         if (bitPos < 0) {
             int nextByte = in.get();
             if (nextByte == EOF) {
-                return -1; // End of file
+                return -1; 
             }
             buffer = static_cast<uint8_t>(nextByte);
-            bitPos = 7; // Reset to the most significant bit (MSB)
+            bitPos = 7; // -> Resetting to the most significant bit (MSB)
         }
 
-        // Extract the bit at bitPos (from MSB to LSB)
+        //-> Extract the bit at bitPos (from Most Significant Bit to Least Significant Bit) and decrement position
         int bit = (buffer >> bitPos) & 1;
         bitPos--;
         return bit;
     }
 };
 
-// ============================================================================
-// SECTION 3: HUFFMAN ALGORITHM CORE LOGIC
-// ============================================================================
 
-// // Builds the Huffman Tree from an array of 256 character frequencies.
-// // Uses a min-priority queue to iteratively merge the two least frequent nodes.
+// ->SECTION 3: HUFFMAN ALGORITHM CORE LOGIC
+
+
+//-> This function builds the Huffman Tree from an array of 256 character frequencies.
 HuffmanNode* buildHuffmanTree(const uint64_t freq[256]) {
-    // // Step 1: Initialize min-priority queue
+    //-> [Initialize min-priority queue]
     priority_queue<HuffmanNode*, vector<HuffmanNode*>, CompareNode> pq;
 
     for (int i = 0; i < 256; ++i) {
@@ -177,80 +173,77 @@ HuffmanNode* buildHuffmanTree(const uint64_t freq[256]) {
         }
     }
 
-    // // Handle edge case: empty file (no characters)
+    //-> Handle edge case: empty file (no characters)
     if (pq.empty()) {
         return nullptr;
     }
 
-    // // Handle edge case: file contains only 1 unique character.
-    // // A single node has no branches; we create a dummy parent so the character gets code "0".
+    //-> Handle edge case: file contains only 1 unique character
     if (pq.size() == 1) {
-        HuffmanNode* onlyLeaf = pq.top();
+        HuffmanNode* onlyLeaf = pq.top(); //-> Get the single character node
         pq.pop();
-        HuffmanNode* root = new HuffmanNode(onlyLeaf->frequency, onlyLeaf->minChar, onlyLeaf, nullptr);
-        return root;
+        HuffmanNode* root = new HuffmanNode(onlyLeaf->frequency, onlyLeaf->minChar, onlyLeaf, nullptr); //-> Create a dummy parent node for the single character
+        return root; //-> Returning the root of the tree
     }
 
-    // // Step 2: Iteratively combine the two lowest-frequency subtrees
+    //-> [Iteratively combine the two lowest-frequency subtrees]
     while (pq.size() > 1) {
-        // Extract the two lowest frequency nodes
-        HuffmanNode* leftChild = pq.top();
+        //-> Extracting the two lowest frequency nodes
+        HuffmanNode* leftChild = pq.top(); //-> Left child represents bit '0'
         pq.pop();
-        HuffmanNode* rightChild = pq.top();
+        HuffmanNode* rightChild = pq.top();//-> Right child represents bit '1'
         pq.pop();
 
-        // Create an internal parent node with combined frequency
-        uint64_t combinedFreq = leftChild->frequency + rightChild->frequency;
-        uint8_t combinedMinChar = min(leftChild->minChar, rightChild->minChar);
+        //-> Creating an internal parent node with combined frequency
+        uint64_t combinedFreq = leftChild->frequency + rightChild->frequency; //-> Sum of frequencies of the two children
+        uint8_t combinedMinChar = min(leftChild->minChar, rightChild->minChar); //-> Minimum character value among the two children for tie-breaking
 
-        HuffmanNode* parent = new HuffmanNode(combinedFreq, combinedMinChar, leftChild, rightChild);
-        pq.push(parent);
+        HuffmanNode* parent = new HuffmanNode(combinedFreq, combinedMinChar, leftChild, rightChild); //-> Create a new internal node with left and right children
+        pq.push(parent); //-> Push the new parent node back into the priority queue for further processing
     }
 
-    // // The final remaining node is the root of the complete Huffman Tree
-    return pq.top();
+    return pq.top(); //-> The last remaining node in the priority queue is the root of the complete Huffman Tree
 }
 
-// // Traverses the Huffman Tree recursively to generate prefix-free binary codes.
-// // Going left appends '0', going right appends '1'.
+// -> This function recursively traverses the Huffman Tree to generate prefix-free binary codes for each character
 void generateHuffmanCodes(const HuffmanNode* node, const string& currentCode, string codes[256]) {
     if (!node) return;
 
-    // // If a leaf node is reached, record the accumulated binary code for this character
+    //-> If the current node is a leaf, assign the accumulated binary code to the corresponding character in the codes array
     if (node->isLeaf()) {
-        // If the tree consisted of only 1 character with dummy parent, code is "0"
+        //-> If the current code is empty (which can happen if there's only one unique character), assign "0" as its code to ensure a valid representation
         codes[node->character] = currentCode.empty() ? "0" : currentCode;
         return;
     }
 
-    // // Traverse left branch (bit 0)
+    //-> Traverse left branch (bit 0)
     generateHuffmanCodes(node->left, currentCode + "0", codes);
 
-    // // Traverse right branch (bit 1)
+    //-> Traverse right branch (bit 1)
     generateHuffmanCodes(node->right, currentCode + "1", codes);
 }
 
-// // Helper function to print an ASCII / character representation cleanly for students
+// ->This Helper function is used to print an ASCII / character representation cleanly for students
 string formatChar(uint8_t ch) {
     switch (ch) {
-        case '\n': return "'\\n' (Newline)";
-        case '\r': return "'\\r' (Carriage Return)";
-        case '\t': return "'\\t' (Tab)";
-        case ' ':  return "' '  (Space)";
+        case '\n': return "'\\n' (Newline)"; //-> Special case for newline character
+        case '\r': return "'\\r' (Carriage Return)"; //-> Special case for carriage return character
+        case '\t': return "'\\t' (Tab)"; //-> Special case for tab character
+        case ' ':  return "' '  (Space)"; //-> Special case for space character
         default:
-            if (ch >= 32 && ch <= 126) {
-                return string("'") + static_cast<char>(ch) + "'";
+            if (ch >= 32 && ch <= 126) { //-> Printable ASCII range
+                return string("'") + static_cast<char>(ch) + "'"; //-> Return the character itself for printable ASCII
             } else {
-                return "0x" + ([ch]() {
+                return "0x" + ([ch]() { //-> Return hexadecimal representation for non-printable characters
                     char buf[8];
-                    snprintf(buf, sizeof(buf), "%02X", ch);
-                    return string(buf);
+                    snprintf(buf, sizeof(buf), "%02X", ch); //-> Format the character as a two-digit hexadecimal string
+                    return string(buf); //-> Return the formatted string
                 })();
             }
     }
 }
 
-// // Prints the Huffman Codebook table and frequency breakdown for analysis.
+//_> This function prints the Compression Huffman table with character frequencies, percentages, and their corresponding binary codes.
 void displayCodeTable(const uint64_t freq[256], const string codes[256], uint64_t totalBytes) {
     cout << COLOR_SKY_BLUE << "\n================================================================================\n" << COLOR_RESET;
     cout << COLOR_WHITE << "                      COMPRESSION HUFFMAN TABLE                           \n" << COLOR_RESET;
@@ -279,12 +272,8 @@ void displayCodeTable(const uint64_t freq[256], const string codes[256], uint64_
     }
     cout << COLOR_SKY_BLUE << "================================================================================\n\n" << COLOR_RESET;
 }
-//=========================================================================================
 
-//SECTION 3-B: DECOMPRESSION TABLE DISPLAY
-
-//==============================================================================================
-// // Prints the Huffman Codebook table for Decompression based on reconstructed metadata.
+//-this function prints the Decompression Huffman table with restored character frequencies, percentages, and their corresponding binary codes.
 void displayDecompressionTable(const uint64_t freq[256], const string codes[256], uint64_t totalBytes) {
     cout << COLOR_SKY_BLUE << "\n================================================================================\n" << COLOR_RESET;
     cout << COLOR_WHITE << "                   DECOMPRESSION HUFFMAN TABLE                       \n" << COLOR_RESET;
@@ -315,50 +304,47 @@ void displayDecompressionTable(const uint64_t freq[256], const string codes[256]
 }
 
 
-// ============================================================================
-// SECTION 4: FILE COMPRESSION
-// ============================================================================
 
-// // Compresses an input text file into a binary .huff file.
-// // Encapsulates metadata (original file size, unique character frequency table)
-// // alongside the bit-packed payload.
+// -> SECTION 4: FILE COMPRESSION
+
+
+//-> This bool function compresses a given input file using Huffman coding and writes the compressed data to an output file
 bool compressFile(const string& inputPath, const string& outputPath) {
-    // // Step 1: Open source file in binary mode
+    //-> [Opening source file in binary mode]
     ifstream inFile(inputPath, ios::binary);
-    if (!inFile.is_open()) {
+    if (!inFile.is_open()) { //-> Check if the input file was successfully opened
         cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         cerr << COLOR_RED << "[!]" <<COLOR_WHITE<< " Error: Failed to open input file: " << inputPath << "\n";
         cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
 
-    // // Step 2: Character Frequency Analysis
-    // Count exact occurrences of each byte across the entire file
-    uint64_t freq[256] = {0};
-    uint64_t originalSize = 0;
-    char buffer[4096];
+    //-> [Character Frequency Analysis]
+    uint64_t freq[256] = {0}; //-> Array to hold frequency counts for each possible byte value (0-255)
+    uint64_t originalSize = 0; //-> Variable to track the total number of bytes read from the input file
+    char buffer[4096]; //-> Buffer to read chunks of the input file for efficient processing
 
-    while (inFile.read(buffer, sizeof(buffer)) || inFile.gcount() > 0) {
-        streamsize bytesRead = inFile.gcount();
-        originalSize += bytesRead;
-        for (streamsize i = 0; i < bytesRead; ++i) {
-            freq[static_cast<uint8_t>(buffer[i])]++;
+    while (inFile.read(buffer, sizeof(buffer)) || inFile.gcount() > 0) { //-> Read the file in chunks until no more data is available
+        streamsize bytesRead = inFile.gcount(); //-> Get the actual number of bytes read in this iteration
+        originalSize += bytesRead; //-> Accumulate the total size of the original file
+        for (streamsize i = 0; i < bytesRead; ++i) { //-> Iterate through each byte in the buffer and update its frequency count
+            freq[static_cast<uint8_t>(buffer[i])]++; //-> Increment the frequency count for the corresponding byte value
         }
     }
 
-    // Count how many unique characters appeared in the file
+    //-> This count how many unique characters appeared in the file
     uint16_t uniqueCharCount = 0;
-    for (int i = 0; i < 256; ++i) {
+    for (int i = 0; i < 256; ++i) { //-> Iterate through the frequency array to count how many unique characters were found
         if (freq[i] > 0) {
             uniqueCharCount++;
         }
     }
     cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
     cout << COLOR_GREEN << "[+]" << COLOR_WHITE << " Character frequency analysis completed.\n";
-    cout << COLOR_GREEN <<"    Original File Size: "<< COLOR_WHITE << originalSize << " bytes\n";
-    cout << COLOR_GREEN <<"    Unique Characters:  "<< COLOR_WHITE << uniqueCharCount << "\n\n";
+    cout << COLOR_GREEN <<"    Original File Size: "<< COLOR_WHITE << originalSize << " bytes\n"; //-> Display the total size of the original file
+    cout << COLOR_GREEN <<"    Unique Characters:  "<< COLOR_WHITE << uniqueCharCount << "\n\n"; //->  Display the number of unique characters found in the file
 
-    // // Step 3: Handle empty file edge case
+    //->[Handle empty file edge case]
     if (originalSize == 0) {
         ofstream outFile(outputPath, ios::binary);
         if (!outFile.is_open()) {
@@ -367,20 +353,20 @@ bool compressFile(const string& inputPath, const string& outputPath) {
             cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
             return false;
         }
-        // Write header indicating 0 bytes
+        //-> this writes the header for an empty compressed file, including the magic identifier and zeroed metadata
         const char magic[4] = {'H', 'U', 'F', '1'};
         outFile.write(magic, 4);
         uint64_t zeroSize = 0;
         uint16_t zeroUniq = 0;
-        outFile.write(reinterpret_cast<const char*>(&zeroSize), sizeof(zeroSize));
-        outFile.write(reinterpret_cast<const char*>(&zeroUniq), sizeof(zeroUniq));
+        outFile.write(reinterpret_cast<const char*>(&zeroSize), sizeof(zeroSize)); //-> Write original file size (0 bytes)
+        outFile.write(reinterpret_cast<const char*>(&zeroUniq), sizeof(zeroUniq)); //-> Write unique character count (0)
         outFile.close();
         cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         cout << COLOR_RED << "[!]" << COLOR_WHITE << " Input file is empty. Generated empty compressed archive.\n" << COLOR_RESET;
         cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return true;
     }
-    //->loading bar for compression
+    //-> Display a progress bar for building the Huffman tree and compressing the file
     int totalWidth = 30;
     cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
     cout << COLOR_WHITE << "Building Huffman tree & compressing file...\n\n" << COLOR_RESET;
@@ -406,17 +392,17 @@ bool compressFile(const string& inputPath, const string& outputPath) {
 
     cout << "\n\n";
 
-    // // Step 4: Build Huffman Tree from frequency counts
+    //-> [Build Huffman Tree from frequency counts]
     HuffmanNode* root = buildHuffmanTree(freq);
 
-    // // Step 5: Generate prefix-free variable-length binary codes
+    //->[Generate prefix-free variable-length binary codes]
     string codes[256];
     generateHuffmanCodes(root, "", codes);
 
-    // Display the codebook table for review
+    //-> Display the codetable for review
     displayCodeTable(freq, codes, originalSize);
 
-    // // Step 6: Prepare output file and write header metadata
+    //->[Prepare output file and write header metadata]
     ofstream outFile(outputPath, ios::binary);
     if (!outFile.is_open()) {
         cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
@@ -426,65 +412,60 @@ bool compressFile(const string& inputPath, const string& outputPath) {
         return false;
     }
 
-    // // Header Structure:
-    // 1. Magic Bytes: "HUF1" (4 bytes) - Identifies valid Huffman archive
-    // 2. Original File Size: uint64_t (8 bytes) - Prevents decoding trailing padding bits
-    // 3. Unique Character Count: uint16_t (2 bytes) - Number of entries in frequency table
-    // 4. Frequency Table Entries: [uint8_t character, uint64_t count] * uniqueCharCount
+    //-> const char magic for file identification
     const char magic[4] = {'H', 'U', 'F', '1'};
-    outFile.write(magic, 4);
-    outFile.write(reinterpret_cast<const char*>(&originalSize), sizeof(originalSize));
-    outFile.write(reinterpret_cast<const char*>(&uniqueCharCount), sizeof(uniqueCharCount));
+    outFile.write(magic, 4); //-> Write the magic identifier to the output file
+    outFile.write(reinterpret_cast<const char*>(&originalSize), sizeof(originalSize)); //-> Write the original file size to the output file
+    outFile.write(reinterpret_cast<const char*>(&uniqueCharCount), sizeof(uniqueCharCount)); //-> Write the number of unique characters to the output file
 
-    for (int i = 0; i < 256; ++i) {
+    for (int i = 0; i < 256; ++i) { //-> Write the frequency table for each unique character to the output file
         if (freq[i] > 0) {
             uint8_t ch = static_cast<uint8_t>(i);
             uint64_t count = freq[i];
-            outFile.write(reinterpret_cast<const char*>(&ch), sizeof(ch));
-            outFile.write(reinterpret_cast<const char*>(&count), sizeof(count));
+            outFile.write(reinterpret_cast<const char*>(&ch), sizeof(ch)); //-> Write the character byte
+            outFile.write(reinterpret_cast<const char*>(&count), sizeof(count)); //-> Write the frequency count for that character
         }
     }
 
-    // // Step 7: Rewind input file and encode content into bitstream
-    inFile.clear();               // Clear EOF and error flags
-    inFile.seekg(0, ios::beg); // Rewind to file beginning
+    //->[Rewind input file and encode content into bitstream]
+    inFile.clear(); //-> Clear any error from the input file stream
+    inFile.seekg(0, ios::beg); //-> Rewind the input file to the beginning for reading again
 
-    BitWriter bitWriter(outFile);
-    while (inFile.read(buffer, sizeof(buffer)) || inFile.gcount() > 0) {
+    BitWriter bitWriter(outFile); //-> Create a BitWriter to handle bit-level writing to the output file
+    while (inFile.read(buffer, sizeof(buffer)) || inFile.gcount() > 0) { //-> Read the input file in chunks again for encoding
         streamsize bytesRead = inFile.gcount();
-        for (streamsize i = 0; i < bytesRead; ++i) {
+        for (streamsize i = 0; i < bytesRead; ++i) { //-> For each byte read, look up its Huffman code and write the corresponding bits to the output file
             uint8_t ch = static_cast<uint8_t>(buffer[i]);
             bitWriter.writeBits(codes[ch]);
         }
     }
 
-    // Flush any remaining partial byte
+    //-> Flush any remaining partial byte
     bitWriter.flush();
 
-    // Close files
-    inFile.close();
-    outFile.close();
+    inFile.close(); //-> Close the input file after encoding is complete
+    outFile.close(); //-> Close the output file after writing is complete
 
-    // Clean up allocated tree memory
+    //-> Free the Huffman tree memory to prevent memory leaks
     delete root;
 
-    // // Step 8: Compression Statistics Calculation
-    uint64_t compressedSize = fs::file_size(outputPath);
-    double spaceSaved = 0.0;
+    //->[Compression Statistics Calculation]
+    uint64_t compressedSize = fs::file_size(outputPath); //-> Get the size of the compressed output file
+    double spaceSaved = 0.0; //-> Initialize space saved percentage
     if (originalSize > 0) {
-        spaceSaved = (1.0 - (static_cast<double>(compressedSize) / static_cast<double>(originalSize))) * 100.0;
+        spaceSaved = (1.0 - (static_cast<double>(compressedSize) / static_cast<double>(originalSize))) * 100.0; //-> Calculate the percentage of space saved by compression
     }
 
     cout << COLOR_SKY_BLUE << "\n========================================================================\n\n" << COLOR_RESET;
     cout << COLOR_WHITE << "                      COMPRESSION SUMMARY REPORT                        \n\n";
     cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
-    cout << COLOR_GREEN << "  Original File:          " << COLOR_WHITE << inputPath << "\n";
-    cout << COLOR_GREEN << "  Compressed File:        " << COLOR_WHITE << outputPath << "\n";
-    cout << COLOR_GREEN << "  Original File Size:     " << COLOR_WHITE << originalSize << " bytes\n";
-    cout << COLOR_GREEN << "  Compressed File Size:   " << COLOR_WHITE << compressedSize << " bytes\n";
-    cout << COLOR_GREEN << "  Space Saved:            " << COLOR_WHITE << fixed << setprecision(2) << spaceSaved << " %\n";
-    cout << COLOR_GREEN << "  Compression Ratio:      " << COLOR_WHITE << fixed << setprecision(2)
-              << (compressedSize > 0 ? (static_cast<double>(originalSize) / compressedSize) : 0.0) << " : 1\n";
+    cout << COLOR_GREEN << "  Original File:          " << COLOR_WHITE << inputPath << "\n"; //-> Display the path of the original input file
+    cout << COLOR_GREEN << "  Compressed File:        " << COLOR_WHITE << outputPath << "\n"; //-> Display the path of the compressed output file
+    cout << COLOR_GREEN << "  Original File Size:     " << COLOR_WHITE << originalSize << " bytes\n"; //-> Display the size of the original input file in bytes
+    cout << COLOR_GREEN << "  Compressed File Size:   " << COLOR_WHITE << compressedSize << " bytes\n"; //-> Display the size of the compressed output file in bytes
+    cout << COLOR_GREEN << "  Space Saved:            " << COLOR_WHITE << fixed << setprecision(2) << spaceSaved << " %\n"; //-> Display the percentage of space saved by compression, formatted to two decimal places
+    cout << COLOR_GREEN << "  Compression Ratio:      " << COLOR_WHITE << fixed << setprecision(2) //-> Display the compression ratio, calculated as original size divided by compressed size, formatted to two decimal places
+              << (compressedSize > 0 ? (static_cast<double>(originalSize) / compressedSize) : 0.0) << " : 1\n"; //-> Handle division by zero if compressed size is zero
     cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
 
     return true;
