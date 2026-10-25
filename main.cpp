@@ -563,7 +563,7 @@ bool decompressFile(const std::string& inputPath, const std::string& outputPath)
     // // Step 5: Rebuild the identical Huffman Tree
     HuffmanNode* root = buildHuffmanTree(freq);
     if (!root) {
-        std::cerr << COLOR_RED << "[-]" << COLOR_WHITE << " Error: Failed to reconstruct Huffman tree from header.\n" << COLOR_RESET;
+        std::cerr << COLOR_RED << "[!]" << COLOR_WHITE << " Error: Failed to reconstruct Huffman tree from header.\n" << COLOR_RESET;
         return false;
     }
 
@@ -828,11 +828,11 @@ int main(int argc, char* argv[]) {
         } else if (mode == "-v" && argc >= 4) {
             return verifyFileIntegrity(argv[2], argv[3]) ? 0 : 1;
         } else {
-            std::cout << "Usage:\n";
-            std::cout << "  Interactive Mode: " << argv[0] << "\n";
-            std::cout << "  CLI Compression:  " << argv[0] << " -c <input.txt> [output.huff]\n";
-            std::cout << "  CLI Decompression:" << argv[0] << " -d <input.huff> [output.txt]\n";
-            std::cout << "  CLI Verification: " << argv[0] << " -v <original> <decompressed>\n";
+            std::cout << COLOR_GREEN << "Usage:\n" << COLOR_RESET;
+            std::cout << COLOR_GREEN << "  Interactive Mode: " << COLOR_WHITE << argv[0] << "\n" << COLOR_RESET;
+            std::cout << COLOR_GREEN << "  CLI Compression:  " << COLOR_WHITE << argv[0] << " -c <input.txt> [output.huff]\n" << COLOR_RESET;
+            std::cout << COLOR_GREEN << "  CLI Decompression:" << COLOR_WHITE << argv[0] << " -d <input.huff> [output.txt]\n" << COLOR_RESET;
+            std::cout << COLOR_GREEN << "  CLI Verification: " << COLOR_WHITE << argv[0] << " -v <original> <decompressed>\n" << COLOR_RESET;
             return 1;
         }
     }
@@ -853,13 +853,13 @@ int main(int argc, char* argv[]) {
 
         switch (choice) {
             case '1': {
-                std::string inPath = promptFilePath("Enter path to input text file: ");
+                std::string inPath = promptFilePath("Enter path to input text file -> ");
                 if (inPath.empty() || !fs::exists(inPath)) {
-                    std::cerr << "[-] Error: Input file does not exist.\n";
+                    std::cerr << COLOR_RED << "[!]" << COLOR_WHITE <<  "Error: Input file does not exist.\n" << COLOR_RESET;
                     break;
                 }
                 std::string defaultOut = inPath + ".huff";
-                std::cout << "Enter output compressed file path [default: " << defaultOut << "]: ";
+                std::cout << "Please click enter for the output file path [default: " << defaultOut << "]-> ";
                 std::string outPath;
                 std::getline(std::cin, outPath);
                 if (outPath.empty()) {
@@ -869,9 +869,9 @@ int main(int argc, char* argv[]) {
                 break;
             }
             case '2': {
-                std::string inPath = promptFilePath("Enter path to compressed .huff file: ");
+                std::string inPath = promptFilePath("Enter path to compressed .huff file -> ");
                 if (inPath.empty() || !fs::exists(inPath)) {
-                    std::cerr << "[-] Error: File does not exist.\n";
+                    std::cerr << COLOR_RED << "[!]" << COLOR_WHITE << "Error: File does not exist.\n" << COLOR_RESET;
                     break;
                 }
                 std::string defaultOut;
@@ -880,7 +880,7 @@ int main(int argc, char* argv[]) {
                 } else {
                     defaultOut = inPath + "_decompressed.txt";
                 }
-                std::cout << "Enter output decompressed file path [default: " << defaultOut << "]: ";
+                std::cout << "Please click enter for the output file path [default: " << defaultOut << "]-> ";
                 std::string outPath;
                 std::getline(std::cin, outPath);
                 if (outPath.empty()) {
@@ -890,18 +890,18 @@ int main(int argc, char* argv[]) {
                 break;
             }
             case '3': {
-                std::string origPath = promptFilePath("Enter path to original file: ");
-                std::string decompPath = promptFilePath("Enter path to decompressed file: ");
+                std::string origPath = promptFilePath("Enter path to original file -> ");
+                std::string decompPath = promptFilePath("Enter path to decompressed file -> ");
                 verifyFileIntegrity(origPath, decompPath);
                 break;
             }
             case '4': {
-                std::cout << "\nExiting Huffman Utility. Have a great day!\n";
+                std::cout << COLOR_GREEN << "\nExiting Huffman Utility. Thank you for using our program!\n" << COLOR_RESET;
                 running = false;
                 break;
             }
             default: {
-                std::cout << "[-] Invalid selection. Please enter 1, 2, 3, or 4.\n";
+                std::cout << COLOR_RED << "[!]" << COLOR_WHITE << " Invalid choice. Please enter 1, 2, 3, or 4.\n" << COLOR_RESET;
                 break;
             }
         }
