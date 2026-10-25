@@ -251,29 +251,29 @@ std::string formatChar(uint8_t ch) {
 
 // // Prints the Huffman Codebook table and frequency breakdown for analysis.
 void displayCodeTable(const uint64_t freq[256], const std::string codes[256], uint64_t totalBytes) {
-    std::cout << "\n========================================================================\n";
-    std::cout << "                      HUFFMAN CODEBOOK TABLE                           \n";
-    std::cout << "========================================================================\n";
-    std::cout << std::left << std::setw(6)  << "Byte"
+    std::cout << COLOR_SKY_BLUE << "\n========================================================================\n" << COLOR_RESET;
+    std::cout << COLOR_WHITE << "                      HUFFMAN CODEBOOK TABLE                           \n" << COLOR_RESET;
+    std::cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
+    std::cout << COLOR_WHITE << std::left << std::setw(6)  << "Byte"
               << std::setw(24) << "Character"
               << std::setw(14) << "Frequency"
               << std::setw(12) << "Percentage"
               << std::setw(18) << "Huffman Code"
-              << std::setw(8)  << "Length" << "\n";
-    std::cout << "------------------------------------------------------------------------\n";
+              << std::setw(8)  << "Length" << "\n"<< COLOR_RESET;
+    std::cout << COLOR_SKY_BLUE << "------------------------------------------------------------------------\n" << COLOR_RESET;
 
     for (int i = 0; i < 256; ++i) {
         if (freq[i] > 0) {
             double pct = (totalBytes > 0) ? (static_cast<double>(freq[i]) / totalBytes * 100.0) : 0.0;
-            std::cout << std::left << std::setw(6)  << i
-                      << std::setw(24) << formatChar(static_cast<uint8_t>(i))
-                      << std::setw(14) << freq[i]
+            std::cout << std::left << std::setw(6)  << COLOR_GREEN << i
+                      << std::setw(24) << COLOR_SKY_BLUE << formatChar(static_cast<uint8_t>(i))
+                      << std::setw(14) << COLOR_WHITE << freq[i]
                       << std::fixed << std::setprecision(2) << std::setw(10) << pct << "% "
                       << std::setw(18) << codes[i]
                       << std::setw(8)  << codes[i].length() << "\n";
         }
     }
-    std::cout << "========================================================================\n\n";
+    std::cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
 }
 
 // ============================================================================
@@ -287,7 +287,9 @@ bool compressFile(const std::string& inputPath, const std::string& outputPath) {
     // // Step 1: Open source file in binary mode
     std::ifstream inFile(inputPath, std::ios::binary);
     if (!inFile.is_open()) {
-        std::cerr << "[-] Error: Failed to open input file: " << inputPath << "\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        std::cerr << COLOR_RED << "[!]" <<COLOR_WHITE<< " Error: Failed to open input file: " << inputPath << "\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return false;
     }
 
@@ -312,16 +314,18 @@ bool compressFile(const std::string& inputPath, const std::string& outputPath) {
             uniqueCharCount++;
         }
     }
-
-    std::cout << "[+] Character frequency analysis completed.\n";
-    std::cout << "    Original File Size: " << originalSize << " bytes\n";
-    std::cout << "    Unique Characters:  " << uniqueCharCount << "\n";
+    std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "[+]" << COLOR_WHITE << " Character frequency analysis completed.\n";
+    std::cout << COLOR_GREEN <<"    Original File Size: "<< COLOR_WHITE << originalSize << " bytes\n";
+    std::cout << COLOR_GREEN <<"    Unique Characters:  "<< COLOR_WHITE << uniqueCharCount << "\n\n";
 
     // // Step 3: Handle empty file edge case
     if (originalSize == 0) {
         std::ofstream outFile(outputPath, std::ios::binary);
         if (!outFile.is_open()) {
-            std::cerr << "[-] Error: Cannot create output file: " << outputPath << "\n";
+            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+            std::cerr << COLOR_RED << "[!]" << COLOR_WHITE << " Error: Cannot create output file: " << outputPath << "\n\n";
+            std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
             return false;
         }
         // Write header indicating 0 bytes
@@ -332,9 +336,36 @@ bool compressFile(const std::string& inputPath, const std::string& outputPath) {
         outFile.write(reinterpret_cast<const char*>(&zeroSize), sizeof(zeroSize));
         outFile.write(reinterpret_cast<const char*>(&zeroUniq), sizeof(zeroUniq));
         outFile.close();
-        std::cout << "[!] Input file is empty. Generated empty compressed archive.\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        std::cout << COLOR_RED << "[!]" << COLOR_WHITE << " Input file is empty. Generated empty compressed archive.\n" << COLOR_RESET;
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         return true;
     }
+    //->loading bar for compression
+    int totalWidth = 30;
+    std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+    std::cout << COLOR_WHITE << "Building Huffman tree & compressing file...\n\n" << COLOR_RESET;
+
+    for (int i = 0; i <= 100; i += 2) {
+        int filledWidth = (i * totalWidth) / 100;
+
+        std::cout << "\r[";
+
+        std::cout << COLOR_GREEN;
+        for (int j = 0; j < filledWidth; ++j) {
+            std::cout << "=";
+        }
+
+        std::cout << COLOR_WHITE;
+        for (int j = filledWidth; j < totalWidth; ++j) {
+            std::cout << " ";
+        }
+
+        std::cout << "] " << COLOR_GREEN << i << "%" << COLOR_WHITE << std::flush;
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+    }
+
+    std::cout << "\n\n";
 
     // // Step 4: Build Huffman Tree from frequency counts
     HuffmanNode* root = buildHuffmanTree(freq);
@@ -349,7 +380,9 @@ bool compressFile(const std::string& inputPath, const std::string& outputPath) {
     // // Step 6: Prepare output file and write header metadata
     std::ofstream outFile(outputPath, std::ios::binary);
     if (!outFile.is_open()) {
-        std::cerr << "[-] Error: Cannot create output file: " << outputPath << "\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
+        std::cerr << COLOR_RED << "[!]" << COLOR_WHITE << " Error: Cannot create output file: " << outputPath << "\n\n";
+        std::cout << COLOR_SKY_BLUE << "-------------------------------------------------------------------------\n\n" << COLOR_RESET;
         delete root;
         return false;
     }
@@ -403,17 +436,17 @@ bool compressFile(const std::string& inputPath, const std::string& outputPath) {
         spaceSaved = (1.0 - (static_cast<double>(compressedSize) / static_cast<double>(originalSize))) * 100.0;
     }
 
-    std::cout << "\n========================================================================\n";
-    std::cout << "                      COMPRESSION SUMMARY REPORT                        \n";
-    std::cout << "========================================================================\n";
-    std::cout << "  Original File:          " << inputPath << "\n";
-    std::cout << "  Compressed File:        " << outputPath << "\n";
-    std::cout << "  Original File Size:     " << originalSize << " bytes\n";
-    std::cout << "  Compressed File Size:   " << compressedSize << " bytes\n";
-    std::cout << "  Space Saved:            " << std::fixed << std::setprecision(2) << spaceSaved << " %\n";
-    std::cout << "  Compression Ratio:      " << std::fixed << std::setprecision(2)
+    std::cout << COLOR_SKY_BLUE << "\n========================================================================\n\n" << COLOR_RESET;
+    std::cout << COLOR_WHITE << "                      COMPRESSION SUMMARY REPORT                        \n";
+    std::cout << COLOR_SKY_BLUE << "========================================================================\n" << COLOR_RESET;
+    std::cout << COLOR_GREEN << "  Original File:          " << COLOR_WHITE << inputPath << "\n";
+    std::cout << COLOR_GREEN << "  Compressed File:        " << COLOR_WHITE << outputPath << "\n";
+    std::cout << COLOR_GREEN << "  Original File Size:     " << COLOR_WHITE << originalSize << " bytes\n";
+    std::cout << COLOR_GREEN << "  Compressed File Size:   " << COLOR_WHITE << compressedSize << " bytes\n";
+    std::cout << COLOR_GREEN << "  Space Saved:            " << COLOR_WHITE << std::fixed << std::setprecision(2) << spaceSaved << " %\n";
+    std::cout << COLOR_GREEN << "  Compression Ratio:      " << COLOR_WHITE << std::fixed << std::setprecision(2)
               << (compressedSize > 0 ? (static_cast<double>(originalSize) / compressedSize) : 0.0) << " : 1\n";
-    std::cout << "========================================================================\n\n";
+    std::cout << COLOR_SKY_BLUE << "========================================================================\n\n" << COLOR_RESET;
 
     return true;
 }
@@ -600,6 +633,7 @@ bool verifyFileIntegrity(const std::string& originalPath, const std::string& dec
     decompFile.seekg(0, std::ios::end);
     std::streamsize origSize = origFile.tellg();
     std::streamsize decompSize = decompFile.tellg();
+    
 
     std::cout << COLOR_SKY_BLUE << "\n========================================================================\n\n" << COLOR_RESET;
 
